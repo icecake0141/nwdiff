@@ -8,6 +8,18 @@
         .diff {
             font-family: monospace;
         }
+        /* Change the font for the entire body */
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+        }
+        /* Use a monospaced font and add a border for the diff display */
+        .diff-container {
+            border: 1px solid #ccc;
+            margin: 20px 0;
+            padding: 10px;
+            font-family: "Courier New", monospace;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 
@@ -23,8 +35,8 @@
     <p>Origin: {{ result.origin_mtime }}</p>
     <p>Dest: {{ result.dest_mtime }}</p>
     <p>Diff Status: {{ result.diff_status }}</p>
-    {% if result.diff_status == "changes detected" %}
-    <div class="diff">{{ result.diff_html | safe }}</div>
+    {% if result.diff_html %}
+    <div class="diff-container">{{ result.diff_html | safe }}</div>
     {% endif %}
     <hr>
     {% endfor %}

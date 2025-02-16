@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# filepath: /path/nwdiff/app.py
 import os
 import csv
 import datetime
@@ -11,15 +13,19 @@ app = Flask(__name__)
 # Directories, CSV file, and command list settings
 ORIGIN_DIR = "origin"
 DEST_DIR = "dest"  # Changed from "dear" to "dest"
+DIFF_DIR = "diff"  # 新規追加
 HOSTS_CSV = "hosts.csv"
 COMMANDS = [
-    "get switch physical-port"
+    "get system status",
+    "get switch physical-port",
+    "diag stp vlan list"
     # Add more commands as needed
 ]
 
 # Create required directories if they do not exist
 os.makedirs(ORIGIN_DIR, exist_ok=True)
 os.makedirs(DEST_DIR, exist_ok=True)
+os.makedirs(DIFF_DIR, exist_ok=True)  # diffディレクトリ作成
 
 
 # --- Function to obtain switch data (assumes existing code) ---
@@ -27,11 +33,24 @@ def fetch_switch_data(host, command):
     """
     Connects to the switch using Netmiko and retrieves the output for the given command.
     """
+    # CSVから該当ホストの情報を取得
+    with open(HOSTS_CSV, newline="", encoding="utf-8") as csvfile:
+        reader = csv.DictReader(csvfile)
+        device_info = None
+        for row in reader:
+            if row["host"] == host:
+                device_info = row
+                break
+    
+    if not device_info:
+        return "Could not find device info in CSV for host: " + host
+
     device = {
-        'device_type': 'cisco_ios',  # Adjust this according to your device type
-        'host': host,
-        'username': 'your_username',  # Replace with your username
-        'password': os.environ.get('DEVICE_PASSWORD', 'your_password'),  # Retrieve password from environment variable
+        'device_type': device_info["model"],
+        'host': device_info["ip"],
+        'username': device_info["username"],
+        'port': device_info["port"],
+        'password': os.environ.get('DEVICE_PASSWORD', 'your_password'),
     }
     
     try:
@@ -58,6 +77,14 @@ def get_file_path(host, command, base):
         return os.path.join(DEST_DIR, filename)
     else:
         raise ValueError("Invalid base")
+
+def get_diff_file_path(host, command):
+    """
+    diffファイルのパスを構築
+    """
+    safe_command = command.replace(" ", "_")
+    filename = f"{host}-{safe_command}-diff.html"
+    return os.path.join(DIFF_DIR, filename)
 
 
 # --- Capture endpoints ---
@@ -136,16 +163,30 @@ def host_list():
     return render_template("host_list.html", hosts=hosts)
 
 
+def generate_side_by_side_html(origin_data, dest_data):
+    """
+    左側に origin の内容、右側に diff_match_patch による比較 (dest側) を表示する side-by-side HTML を生成する
+    """
+    dmp = diff_match_patch()
+    diffs = dmp.diff_main(origin_data, dest_data)
+    dmp.diff_cleanupSemantic(diffs)
+    right_html = dmp.diff_prettyHtml(diffs).replace('¶', '').replace('&para;', '')
+    html = f"""<table style="width:100%; border-collapse: collapse;">
+  <tr>
+    <td style="vertical-align: top; width:50%; border:1px solid #ccc; white-space: pre-wrap;">{origin_data}</td>
+    <td style="vertical-align: top; width:50%; border:1px solid #ccc; white-space: pre-wrap;">{right_html}</td>
+  </tr>
+</table>"""
+    return html
+
 # --- Host Detail page ---
 @app.route("/host/<hostname>")
 def host_detail(hostname):
-    # The view parameter in the URL determines the display format ("inline" or "sidebyside")
     view = request.args.get("view", "inline")
     command_results = []
     for command in COMMANDS:
         origin_path = get_file_path(hostname, command, "origin")
         dest_path = get_file_path(hostname, command, "dest")
-        # Origin file
         if os.path.exists(origin_path):
             origin_mtime = datetime.datetime.fromtimestamp(
                 os.path.getmtime(origin_path)
@@ -155,7 +196,7 @@ def host_detail(hostname):
         else:
             origin_mtime = "file not found"
             origin_data = None
-        # Dest file
+
         if os.path.exists(dest_path):
             dest_mtime = datetime.datetime.fromtimestamp(
                 os.path.getmtime(dest_path)
@@ -166,7 +207,6 @@ def host_detail(hostname):
             dest_mtime = "file not found"
             dest_data = None
 
-        # Calculate diff (only if both files exist)
         diff_html = ""
         if origin_data is None or dest_data is None:
             diff_status = "file not found"
@@ -174,26 +214,33 @@ def host_detail(hostname):
             dmp = diff_match_patch()
             diffs = dmp.diff_main(origin_data, dest_data)
             dmp.diff_cleanupSemantic(diffs)
-            if len(diffs) == 1 and diffs[0][0] == 0:
+            if all(op == 0 for op, text in diffs):
                 diff_status = "identical"
+                if view == "inline":
+                    diff_html = f"<pre>{origin_data}</pre>"
+                elif view == "sidebyside":
+                    diff_html = generate_side_by_side_html(origin_data, dest_data)
+                else:
+                    diff_html = f"<pre>{origin_data}</pre>"
             else:
                 diff_status = "changes detected"
                 if view == "inline":
-                    diff_html = dmp.diff_prettyHtml(diffs)
+                    raw_diff_html = dmp.diff_prettyHtml(diffs)
+                    diff_html = raw_diff_html.replace('¶', '<br>').replace('&para;', '')
                 elif view == "sidebyside":
-                    origin_lines = origin_data.splitlines()
-                    dest_lines = dest_data.splitlines()
-                    diff_table = difflib.HtmlDiff().make_table(
-                        origin_lines,
-                        dest_lines,
-                        fromdesc="Origin",
-                        todesc="Dest",
-                        context=True,
-                        numlines=2,
-                    )
-                    diff_html = diff_table
+                    diff_html = generate_side_by_side_html(origin_data, dest_data)
                 else:
-                    diff_html = dmp.diff_prettyHtml(diffs)
+                    raw_diff_html = dmp.diff_prettyHtml(diffs)
+                    diff_html = raw_diff_html.replace('¶', '<br>').replace('&para;', '')
+
+        # diff ファイルとして保存
+        diff_file_path = get_diff_file_path(hostname, command)
+        try:
+            with open(diff_file_path, "w", encoding="utf-8") as diff_file:
+                diff_file.write(diff_html)
+        except Exception as e:
+            print(f"Error writing diff file for {hostname} {command}: {e}")
+
         command_results.append(
             {
                 "command": command,
@@ -203,7 +250,6 @@ def host_detail(hostname):
                 "diff_html": diff_html,
             }
         )
-    # Link to toggle display format (inverts the view parameter)
     toggle_view = "sidebyside" if view == "inline" else "inline"
     return render_template(
         "host_detail.html",
