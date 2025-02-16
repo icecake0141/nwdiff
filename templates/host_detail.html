@@ -20,6 +20,17 @@
             font-family: "Courier New", monospace;
             white-space: pre-wrap;
         }
+        /* side-by-side 表示用のテーブルスタイル */
+        table.side-by-side {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table.side-by-side td {
+            vertical-align: top;
+            width: 50%;
+            border: 1px solid #ccc;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 
@@ -31,14 +42,15 @@
     </a>
     <hr>
     {% for result in command_results %}
-    <h2>Command: {{ result.command }}</h2>
-    <p>Origin: {{ result.origin_mtime }}</p>
-    <p>Dest: {{ result.dest_mtime }}</p>
-    <p>Diff Status: {{ result.diff_status }}</p>
-    {% if result.diff_html %}
-    <div class="diff-container">{{ result.diff_html | safe }}</div>
-    {% endif %}
-    <hr>
+    <h3>Command: {{ result.command }}</h3>
+    <p>
+        Origin Last Modified: {{ result.origin_mtime }}<br>
+        Dest Last Modified: {{ result.dest_mtime }}<br>
+        Diff Status: {{ result.diff_status }}
+    </p>
+    <div class="diff-container">
+        {{ result.diff_html | safe }}
+    </div>
     {% endfor %}
 </body>
 

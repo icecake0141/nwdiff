@@ -1,32 +1,68 @@
 # Nwdiff Project
 
-Nwdiff is a web application built with Flask that analyzes and displays differences in data retrieved from network devices. It connects to devices using Netmiko and calculates differences using diff-match-patch.
+Nwdiff is a Flask-based web application designed to retrieve, compare, and display configuration or status data collected from network devices. It leverages Netmiko to connect to devices and capture data defined in a CSV file. Using diff-match-patch, the application computes differences between two sets of data and presents the results in both inline and side-by-side views. Diff HTML files are generated and stored in a dedicated "diff" directory for subsequent review.
 
-## Overview
+## Features
 
-- Host information is managed in a CSV file (`hosts.csv`).
-- Output results are saved in "origin" and "dest" directories for each host.
-- Data retrieval and difference comparison are performed using endpoints.
+- **Device Configuration:**  
+  Device details (hostname, IP address, SSH port, username, and device model) are maintained in a CSV file (`hosts.csv`).
+
+- **Data Capture:**  
+  Two endpoints capture data from each device:
+  - `/capture/origin/<hostname>`: Captures the initial (or original) data.
+  - `/capture/dest/<hostname>`: Captures the latest (or destination) data.
+  
+  The captured outputs are stored in the `origin` and `dest` directories, respectively.
+
+- **Difference Computation:**  
+  The application compares corresponding files from the `origin` and `dest` directories using diff-match-patch:
+  - **Inline View:** Presents the standard diff output.
+  - **Side-by-Side View:** Displays the origin data on the left and the computed differences on the right.
+  
+  Diff results are converted into HTML files and saved in the `diff` directory.
+
+- **Detailed Device View:**  
+  Access detailed information for each device through the `/host/<hostname>` endpoint.
 
 ## Installation
 
-1. Clone the repository:
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/yourusername/nwdiff.git
    ```
-2. Move to the project directory:
+2. **Navigate to the project directory:**
    ```bash
-   cd nwdiff
+   cd /workspaces/nwdiff
+   ```
+
+3. **Install dependencies:**  
+   Ensure you have Python installed, then install the required packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
+   Required packages include Flask, Netmiko, and diff-match-patch.
+
+4. **Configure Environment Variables:**  
+   Set the `DEVICE_PASSWORD` environment variable to provide the password needed for device connections:
+   ```bash
+   export DEVICE_PASSWORD=your_device_password
    ```
 
 ## Usage
 
-1. Install the required Python packages (e.g., Flask, netmiko, diff-match-patch).
-2. Set the password required to connect to the devices in the environment variable `DEVICE_PASSWORD`.
-3. Run the application:
+1. **Run the Application:**
    ```bash
    python app.py
    ```
-4. Open http://localhost:5000 in your browser and retrieve data or compare differences for each host from the host information list.
-   - Data retrieval endpoints: /capture/origin/<hostname> and /capture/dest/<hostname>
-   - Detailed display endpoint: /host/<hostname>
+2. **Access the Application:**  
+   Open your browser and navigate to [http://localhost:5000](http://localhost:5000).
+
+3. **Interact with Endpoints:**
+   - **Capture Data:**
+     - For origin data: `/capture/origin/<hostname>`
+     - For destination data: `/capture/dest/<hostname>`
+   - **View Detailed Device Info:**  
+     `/host/<hostname>`
+
+4. **Review Diff Results:**  
+   The computed diff HTML files are stored in the `diff` directory for offline viewing.

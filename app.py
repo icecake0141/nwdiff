@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# filepath: /path/nwdiff/app.py
 import os
 import csv
 import datetime
@@ -13,27 +12,26 @@ app = Flask(__name__)
 # Directories, CSV file, and command list settings
 ORIGIN_DIR = "origin"
 DEST_DIR = "dest"  # Changed from "dear" to "dest"
-DIFF_DIR = "diff"  # 新規追加
+DIFF_DIR = "diff"  # new directory for diff HTML files
 HOSTS_CSV = "hosts.csv"
 COMMANDS = [
     "get system status",
     "get switch physical-port",
-    "diag stp vlan list"
+    "diag stp vlan list",
     # Add more commands as needed
 ]
 
 # Create required directories if they do not exist
 os.makedirs(ORIGIN_DIR, exist_ok=True)
 os.makedirs(DEST_DIR, exist_ok=True)
-os.makedirs(DIFF_DIR, exist_ok=True)  # diffディレクトリ作成
-
+os.makedirs(DIFF_DIR, exist_ok=True)  # create diff directory
 
 # --- Function to obtain switch data (assumes existing code) ---
 def fetch_switch_data(host, command):
     """
     Connects to the switch using Netmiko and retrieves the output for the given command.
     """
-    # CSVから該当ホストの情報を取得
+    # Retrieve device info from CSV
     with open(HOSTS_CSV, newline="", encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         device_info = None
@@ -41,18 +39,18 @@ def fetch_switch_data(host, command):
             if row["host"] == host:
                 device_info = row
                 break
-    
+
     if not device_info:
         return "Could not find device info in CSV for host: " + host
 
     device = {
-        'device_type': device_info["model"],
-        'host': device_info["ip"],
-        'username': device_info["username"],
-        'port': device_info["port"],
-        'password': os.environ.get('DEVICE_PASSWORD', 'your_password'),
+        "device_type": device_info["model"],
+        "host": device_info["ip"],
+        "username": device_info["username"],
+        "port": device_info["port"],
+        "password": os.environ.get("DEVICE_PASSWORD", "your_password"),
     }
-    
+
     try:
         connection = ConnectHandler(**device)
         connection.enable()
@@ -62,8 +60,7 @@ def fetch_switch_data(host, command):
     except Exception as e:
         return f"Failed to retrieve data: {str(e)}"
 
-
-# --- Helper function ---
+# --- Helper functions ---
 def get_file_path(host, command, base):
     """
     base: "origin" or "dest"
@@ -80,12 +77,11 @@ def get_file_path(host, command, base):
 
 def get_diff_file_path(host, command):
     """
-    diffファイルのパスを構築
+    Construct path for diff file.
     """
     safe_command = command.replace(" ", "_")
     filename = f"{host}-{safe_command}-diff.html"
     return os.path.join(DIFF_DIR, filename)
-
 
 # --- Capture endpoints ---
 @app.route("/capture/<base>/<hostname>")
@@ -103,7 +99,6 @@ def capture(base, hostname):
             f.write(data)
     return redirect(url_for("host_list"))
 
-
 # --- Host List page ---
 @app.route("/")
 def host_list():
@@ -114,7 +109,7 @@ def host_list():
         for row in reader:
             host = row["host"]
             ip = row["ip"]
-            # For each command, get the file existence, update time, and diff status for origin and dest files
+            # For each command, get file existence, update time, and diff status for origin and dest files
             origin_info = []
             dest_info = []
             diff_info = []
@@ -162,15 +157,14 @@ def host_list():
             )
     return render_template("host_list.html", hosts=hosts)
 
-
 def generate_side_by_side_html(origin_data, dest_data):
     """
-    左側に origin の内容、右側に diff_match_patch による比較 (dest側) を表示する side-by-side HTML を生成する
+    Generate side-by-side HTML displaying origin content on the left and diff comparison (dest) on the right.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
     dmp.diff_cleanupSemantic(diffs)
-    right_html = dmp.diff_prettyHtml(diffs).replace('¶', '').replace('&para;', '')
+    right_html = dmp.diff_prettyHtml(diffs).replace("¶", "").replace("&para;", "")
     html = f"""<table style="width:100%; border-collapse: collapse;">
   <tr>
     <td style="vertical-align: top; width:50%; border:1px solid #ccc; white-space: pre-wrap;">{origin_data}</td>
@@ -226,14 +220,14 @@ def host_detail(hostname):
                 diff_status = "changes detected"
                 if view == "inline":
                     raw_diff_html = dmp.diff_prettyHtml(diffs)
-                    diff_html = raw_diff_html.replace('¶', '<br>').replace('&para;', '')
+                    diff_html = raw_diff_html.replace("¶", "<br>").replace("&para;", "")
                 elif view == "sidebyside":
                     diff_html = generate_side_by_side_html(origin_data, dest_data)
                 else:
                     raw_diff_html = dmp.diff_prettyHtml(diffs)
-                    diff_html = raw_diff_html.replace('¶', '<br>').replace('&para;', '')
+                    diff_html = raw_diff_html.replace("¶", "<br>").replace("&para;", "")
 
-        # diff ファイルとして保存
+        # Save diff file
         diff_file_path = get_diff_file_path(hostname, command)
         try:
             with open(diff_file_path, "w", encoding="utf-8") as diff_file:
@@ -258,7 +252,6 @@ def host_detail(hostname):
         view=view,
         toggle_view=toggle_view,
     )
-
 
 if __name__ == "__main__":
     app.run(debug=True)
