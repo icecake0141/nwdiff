@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>{{ hostname }} Details</title>
+    <style>
+        .diff {
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Details for {{ hostname }}</h1>
+    <a href="{{ url_for('host_list') }}">Back to Host List</a><br>
+    <a href="{{ url_for('host_detail', hostname=hostname, view=toggle_view) }}">
+        Toggle Display Format (current: {{ view }})
+    </a>
+    <hr>
+    {% for result in command_results %}
+    <h2>Command: {{ result.command }}</h2>
+    <p>Origin: {{ result.origin_mtime }}</p>
+    <p>Dest: {{ result.dest_mtime }}</p>
+    <p>Diff Status: {{ result.diff_status }}</p>
+    {% if result.diff_status == "changes detected" %}
+    <div class="diff">{{ result.diff_html | safe }}</div>
+    {% endif %}
+    <hr>
+    {% endfor %}
+</body>
+
+</html>

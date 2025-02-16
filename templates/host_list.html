@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Host List</title>
+</head>
+
+<body>
+    <h1>Host List</h1>
+    <table border="1" cellpadding="5" cellspacing="0">
+        <tr>
+            <th>Hostname</th>
+            <th>IP Address</th>
+            <th>Origin</th>
+            <th>Dest</th>
+            <th>Diff Status</th>
+            <th>Actions</th>
+        </tr>
+        {% for host in hosts %}
+        <tr>
+            <td>{{ host.host }}</td>
+            <td>{{ host.ip }}</td>
+            <td>
+                {% for info in host.origin_info %}
+                {{ info.command }}: {{ info.mtime }}<br>
+                {% endfor %}
+            </td>
+            <td>
+                {% for info in host.dest_info %}
+                {{ info.command }}: {{ info.mtime }}<br>
+                {% endfor %}
+            </td>
+            <td>
+                {% for info in host.diff_info %}
+                {{ info.command }}: {{ info.status }}<br>
+                {% endfor %}
+            </td>
+            <td>
+                <a href="{{ url_for('capture', base='origin', hostname=host.host) }}">Capture Origin</a><br>
+                <a href="{{ url_for('capture', base='dest', hostname=host.host) }}">Capture Dest</a><br>
+                <a href="{{ url_for('host_detail', hostname=host.host) }}">Details</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+
+</html>
