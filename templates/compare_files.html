@@ -49,6 +49,12 @@
 </div>
 {% endif %}
 
+{% if status %}
+  <div class="mt-3 p-3" style="background-color: {% if status == 'changes detected' %}#ffff99{% elif status == 'identical' %}#add8e6{% endif %};">
+    <strong>{{ status }}</strong>
+  </div>
+{% endif %}
+
 {% if diff_html %}
 <hr>
 <h2>Diff Result:</h2>

@@ -17,7 +17,15 @@
         <div class="card-body">
             <p><strong>Origin Modified:</strong> {{ result.origin_mtime }}</p>
             <p><strong>Dest Modified:</strong> {{ result.dest_mtime }}</p>
-            <p><strong>Diff Status:</strong> {{ result.diff_status }}</p>
+            <div class="mb-3">
+                {% if result.diff_status == "changes detected" %}
+                    <span style="background-color: #ffff99; font-weight:bold; padding: 5px; color:black;">{{ result.diff_status }}</span>
+                {% elif result.diff_status == "identical" %}
+                    <span style="background-color: #add8e6; font-weight:bold; padding: 5px; color:black;">{{ result.diff_status }}</span>
+                {% else %}
+                    <span class="badge badge-info">{{ result.diff_status }}</span>
+                {% endif %}
+            </div>
             <div>
                 {{ result.diff_html | safe }}
             </div>

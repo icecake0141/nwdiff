@@ -23,8 +23,6 @@ DEVICE_COMMANDS = {
         "diag switch trunk summary",
         "diag switch trunk list",
         "diag stp vlan list",
-        "diag sys psu status",
-        "diag sys fan status",
     ),
     "cisco": (
         "show version",
@@ -131,11 +129,14 @@ def compute_diff_status(origin_data, dest_data):
 def compute_diff(origin_data, dest_data, view="inline"):
     """
     Computes diff information using diff_match_patch.
-    Returns a tuple of (diff_status, diff_html) based on the view mode.
+    For inline view:
+      - 行単位で変更があった場合は、両方のdiffタグを含む行は黄色背景になります。
+      - さらに、<del>タグは文字単位で赤背景、<ins>タグは文字単位で青背景とします。
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
     dmp.diff_cleanupSemantic(diffs)
+    
     if all(op == 0 for op, text in diffs):
         status = "identical"
         if view == "sidebyside":
@@ -148,23 +149,78 @@ def compute_diff(origin_data, dest_data, view="inline"):
             diff_html = generate_side_by_side_html(origin_data, dest_data)
         else:
             raw_diff_html = dmp.diff_prettyHtml(diffs)
-            diff_html = raw_diff_html.replace("¶", "<br>").replace("&para;", "")
+            # Replace ¶ and &para; with line breaks
+            inline_html = raw_diff_html.replace("¶", "<br>").replace("&para;", "")
+            
+            # ① 文字単位の更新: <del>と<ins>タグにインライン背景色を追加
+            inline_html = inline_html.replace("<del>", '<del style="background-color: #ffcccc;">')
+            inline_html = inline_html.replace("<ins>", '<ins style="background-color: #cce5ff;">')
+            
+            # ② 行単位の強調表示: diffタグが含まれている行は全て黄色背景にする
+            lines = inline_html.split("<br>")
+            new_lines = []
+            for line in lines:
+                if "<del" in line or "<ins" in line:
+                    new_lines.append(f'<div style="background-color: #ffff99;">{line}</div>')
+                else:
+                    new_lines.append(line)
+            diff_html = "<br>".join(new_lines)
     return status, diff_html
 
 # --- Function to generate side-by-side diff HTML ---
 def generate_side_by_side_html(origin_data, dest_data):
     """
-    Generates side-by-side HTML displaying the origin content on the left and
-    the diff comparison (dest) on the right using diff_match_patch.
+    Generates side-by-side HTML displaying the origin content (common parts plus deletions)
+    on the left and the destination content (common parts plus insertions) on the right.
+    For each column:
+      - 文字単位の強調：削除部分（<del>）は赤背景、追加部分（<ins>）は青背景
+      - 行単位の強調表示：変更があった行は黄色背景でラップ
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
     dmp.diff_cleanupSemantic(diffs)
-    right_html = dmp.diff_prettyHtml(diffs).replace("¶", "").replace("&para;", "")
+
+    origin_parts = []
+    dest_parts = []
+    for op, text in diffs:
+        if op == 0:
+            origin_parts.append(text)
+            dest_parts.append(text)
+        elif op == -1:
+            # 文字単位で背景強調（赤）
+            origin_parts.append(f"<del style='background-color: #ffcccc;'>{text}</del>")
+        elif op == 1:
+            # 文字単位で背景強調（青）
+            dest_parts.append(f"<ins style='background-color: #cce5ff;'>{text}</ins>")
+    origin_html = "".join(origin_parts)
+    dest_html = "".join(dest_parts)
+
+    # 改行を<br>で置換
+    origin_html = origin_html.replace("\n", "<br>")
+    dest_html = dest_html.replace("\n", "<br>")
+
+    # Origin側：diffタグが含まれている行は全て黄色背景にする
+    new_origin_lines = []
+    for line in origin_html.split("<br>"):
+        if "<del" in line or "<ins" in line:
+            new_origin_lines.append(f"<div style='background-color: #ffff99;'>{line}</div>")
+        else:
+            new_origin_lines.append(line)
+    origin_html = "<br>".join(new_origin_lines)
+
+    # Dest側：diffタグが含まれている行は全て黄色背景にする
+    new_dest_lines = []
+    for line in dest_html.split("<br>"):
+        if "<del" in line or "<ins" in line:
+            new_dest_lines.append(f"<div style='background-color: #ffff99;'>{line}</div>")
+        else:
+            new_dest_lines.append(line)
+    dest_html = "<br>".join(new_dest_lines)
+
     html = f"""<table class="table table-bordered" style="width:100%; border-collapse: collapse;">
   <tr>
-    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{origin_data}</td>
-    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{right_html}</td>
+    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{origin_html}</td>
+    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{dest_html}</td>
   </tr>
 </table>"""
     return html
@@ -350,6 +406,7 @@ def compare_files():
     hosts = list({row["host"] for row in read_hosts_csv()})
     error = None
     diff_html = None
+    status = None
     if request.method == "POST":
         host1 = request.form.get("host1")
         host2 = request.form.get("host2")
@@ -371,12 +428,12 @@ def compare_files():
                     data1 = f.read()
                 with open(path2, encoding="utf-8") as f:
                     data2 = f.read()
-                # Compute diff result using side-by-side view if selected.
                 if view == "sidebyside":
                     diff_html = generate_side_by_side_html(data1, data2)
+                    status = compute_diff_status(data1, data2)
                 else:
-                    _, diff_html = compute_diff(data1, data2, view)
-    return render_template("compare_files.html", hosts=hosts, error=error, diff_html=diff_html)
+                    status, diff_html = compute_diff(data1, data2, view)
+    return render_template("compare_files.html", hosts=hosts, error=error, diff_html=diff_html, status=status)
 
 if __name__ == "__main__":
     app.run(debug=True)

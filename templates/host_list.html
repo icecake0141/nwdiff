@@ -46,9 +46,13 @@
             </td>
             <td>
                 {% for item in host.diff_info %}
-                    <div>
+                    {% if item.status == "changes detected" %}
+                        <span class="badge" style="background-color: #ffff99; font-weight: bold; color: black;">{{ item.command }}: {{ item.status }}</span>
+                    {% elif item.status == "identical" %}
+                        <span class="badge" style="background-color: #add8e6; font-weight: bold; color: black;">{{ item.command }}: {{ item.status }}</span>
+                    {% else %}
                         <span class="badge badge-info">{{ item.command }}: {{ item.status }}</span>
-                    </div>
+                    {% endif %}
                 {% endfor %}
             </td>
             <td>
