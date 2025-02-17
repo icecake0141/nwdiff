@@ -18,8 +18,13 @@ HOSTS_CSV = "hosts.csv"
 # Device model specific command lists
 DEVICE_COMMANDS = {
     "fortinet": (
-        "get system performance",
-        "get hardware status",
+        "get system status",
+        "diag switch physical-ports summary",
+        "diag switch trunk summary",
+        "diag switch trunk list",
+        "diag stp vlan list",
+        "diag sys psu status",
+        "diag sys fan status",
     ),
     "cisco": (
         "show version",
@@ -32,9 +37,7 @@ DEVICE_COMMANDS = {
 }
 # Default commands if model does not match
 DEFAULT_COMMANDS = (
-    "get system status",
-    "get switch physical-port",
-    "diag stp vlan list",
+    "show version",
 )
 
 # Create required directories if they do not exist
@@ -158,15 +161,15 @@ def generate_side_by_side_html(origin_data, dest_data):
     diffs = dmp.diff_main(origin_data, dest_data)
     dmp.diff_cleanupSemantic(diffs)
     right_html = dmp.diff_prettyHtml(diffs).replace("¶", "").replace("&para;", "")
-    html = f"""<table style="width:100%; border-collapse: collapse;">
+    html = f"""<table class="table table-bordered" style="width:100%; border-collapse: collapse;">
   <tr>
-    <td style="vertical-align: top; width:50%; border:1px solid #ccc; white-space: pre-wrap;">{origin_data}</td>
-    <td style="vertical-align: top; width:50%; border:1px solid #ccc; white-space: pre-wrap;">{right_html}</td>
+    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{origin_data}</td>
+    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{right_html}</td>
   </tr>
 </table>"""
     return html
 
-# --- Capture endpoints ---
+# --- Capture endpoint for individual host ---
 @app.route("/capture/<base>/<hostname>")
 def capture(base, hostname):
     """
@@ -206,6 +209,49 @@ def capture(base, hostname):
         return redirect(url_for("host_list"))
     except Exception as e:
         return f"Failed to capture data: {str(e)}", 500
+
+# --- New endpoint: Capture for all devices ---
+@app.route("/capture_all/<base>")
+def capture_all(base):
+    """
+    Captures data for all devices registered in hosts.csv.
+    Establishes a connection for each device and retrieves the output for each command.
+    CSV reading ignores comment lines.
+    """
+    if base not in ["origin", "dest"]:
+        return "Invalid capture type", 400
+
+    rows = read_hosts_csv()
+    for row in rows:
+        hostname = row["host"]
+        commands = get_commands_for_host(hostname)
+        device_info = get_device_info(hostname)
+        if not device_info:
+            continue
+
+        device = {
+            "device_type": device_info["model"],
+            "host": device_info["ip"],
+            "username": device_info["username"],
+            "port": device_info["port"],
+            "password": os.environ.get("DEVICE_PASSWORD", "your_password"),
+        }
+        try:
+            connection = ConnectHandler(**device)
+            connection.enable()
+
+            for command in commands:
+                output = connection.send_command(command)
+                filepath = get_file_path(hostname, command, base)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(output)
+
+            connection.disconnect()
+        except Exception as e:
+            print(f"Error capturing data for {hostname}: {e}")
+            # Continue with next device
+
+    return redirect(url_for("host_list"))
 
 # --- Host List page ---
 @app.route("/")
@@ -293,6 +339,44 @@ def host_detail(hostname):
                            command_results=command_results,
                            view=view,
                            toggle_view=toggle_view)
+
+# --- Compare files between two hosts (origin/dest) ---
+@app.route("/compare_files", methods=["GET", "POST"])
+def compare_files():
+    """
+    Renders a form to select two hosts, directory (origin/dest), and command.
+    When submitted, reads corresponding files for both hosts and computes diff.
+    """
+    hosts = list({row["host"] for row in read_hosts_csv()})
+    error = None
+    diff_html = None
+    if request.method == "POST":
+        host1 = request.form.get("host1")
+        host2 = request.form.get("host2")
+        base = request.form.get("base")
+        command = request.form.get("command")
+        view = request.form.get("view", "sidebyside")
+        
+        if not host1 or not host2 or not base or not command:
+            error = "All fields are required."
+        else:
+            path1 = get_file_path(host1, command, base)
+            path2 = get_file_path(host2, command, base)
+            if not os.path.exists(path1):
+                error = f"File for {host1} not found: {path1}"
+            elif not os.path.exists(path2):
+                error = f"File for {host2} not found: {path2}"
+            else:
+                with open(path1, encoding="utf-8") as f:
+                    data1 = f.read()
+                with open(path2, encoding="utf-8") as f:
+                    data2 = f.read()
+                # Compute diff result using side-by-side view if selected.
+                if view == "sidebyside":
+                    diff_html = generate_side_by_side_html(data1, data2)
+                else:
+                    _, diff_html = compute_diff(data1, data2, view)
+    return render_template("compare_files.html", hosts=hosts, error=error, diff_html=diff_html)
 
 if __name__ == "__main__":
     app.run(debug=True)
