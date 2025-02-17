@@ -130,8 +130,8 @@ def compute_diff(origin_data, dest_data, view="inline"):
     """
     Computes diff information using diff_match_patch.
     For inline view:
-      - 行単位で変更があった場合は、両方のdiffタグを含む行は黄色背景になります。
-      - さらに、<del>タグは文字単位で赤背景、<ins>タグは文字単位で青背景とします。
+      - If a line contains any diff tags, the entire line is highlighted with a yellow background.
+      - Additionally, text within <del> tags gets a red background and text within <ins> tags gets a blue background.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
@@ -152,11 +152,11 @@ def compute_diff(origin_data, dest_data, view="inline"):
             # Replace ¶ and &para; with line breaks
             inline_html = raw_diff_html.replace("¶", "<br>").replace("&para;", "")
             
-            # ① 文字単位の更新: <del>と<ins>タグにインライン背景色を追加
+            # Update at character level: add inline background color for diff tags
             inline_html = inline_html.replace("<del>", '<del style="background-color: #ffcccc;">')
             inline_html = inline_html.replace("<ins>", '<ins style="background-color: #cce5ff;">')
             
-            # ② 行単位の強調表示: diffタグが含まれている行は全て黄色背景にする
+            # Highlight entire lines that contain diff tags with a yellow background
             lines = inline_html.split("<br>")
             new_lines = []
             for line in lines:
@@ -173,8 +173,9 @@ def generate_side_by_side_html(origin_data, dest_data):
     Generates side-by-side HTML displaying the origin content (common parts plus deletions)
     on the left and the destination content (common parts plus insertions) on the right.
     For each column:
-      - 文字単位の強調：削除部分（<del>）は赤背景、追加部分（<ins>）は青背景
-      - 行単位の強調表示：変更があった行は黄色背景でラップ
+      - At the character level, text in <del> tags is highlighted with a red background
+        and text in <ins> tags with a blue background.
+      - At the line level, any line containing diff tags is wrapped with a yellow background.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
@@ -187,19 +188,19 @@ def generate_side_by_side_html(origin_data, dest_data):
             origin_parts.append(text)
             dest_parts.append(text)
         elif op == -1:
-            # 文字単位で背景強調（赤）
+            # Highlight deleted text with a red background
             origin_parts.append(f"<del style='background-color: #ffcccc;'>{text}</del>")
         elif op == 1:
-            # 文字単位で背景強調（青）
+            # Highlight added text with a blue background
             dest_parts.append(f"<ins style='background-color: #cce5ff;'>{text}</ins>")
     origin_html = "".join(origin_parts)
     dest_html = "".join(dest_parts)
 
-    # 改行を<br>で置換
+    # Replace newlines with <br> to preserve formatting
     origin_html = origin_html.replace("\n", "<br>")
     dest_html = dest_html.replace("\n", "<br>")
 
-    # Origin側：diffタグが含まれている行は全て黄色背景にする
+    # Origin side: wrap lines containing diff tags with a yellow background
     new_origin_lines = []
     for line in origin_html.split("<br>"):
         if "<del" in line or "<ins" in line:
@@ -208,7 +209,7 @@ def generate_side_by_side_html(origin_data, dest_data):
             new_origin_lines.append(line)
     origin_html = "<br>".join(new_origin_lines)
 
-    # Dest側：diffタグが含まれている行は全て黄色背景にする
+    # Destination side: wrap lines containing diff tags with a yellow background
     new_dest_lines = []
     for line in dest_html.split("<br>"):
         if "<del" in line or "<ins" in line:
