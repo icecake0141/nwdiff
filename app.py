@@ -170,44 +170,31 @@ def compute_diff(origin_data, dest_data, view="inline"):
 # --- Function to generate side-by-side diff HTML ---
 def generate_side_by_side_html(origin_data, dest_data):
     """
-    Generates side-by-side HTML displaying the origin content (common parts plus deletions)
-    on the left and the destination content (common parts plus insertions) on the right.
-    For each column:
-      - At the character level, text in <del> tags is highlighted with a red background
-        and text in <ins> tags with a blue background.
-      - At the line level, any line containing diff tags is wrapped with a yellow background.
+    Generates simplified diff HTML showing only the destination content with differences highlighted.
+    Uses origin as the base for comparison.
+    - At the character level, text in <del> tags is highlighted with a red background
+      and text in <ins> tags with a blue background.
+    - At the line level, any line containing diff tags is wrapped with a yellow background.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
     dmp.diff_cleanupSemantic(diffs)
 
-    origin_parts = []
     dest_parts = []
     for op, text in diffs:
         if op == 0:
-            origin_parts.append(text)
+            # Common parts - show as-is in dest
             dest_parts.append(text)
         elif op == -1:
-            # Highlight deleted text with a red background
-            origin_parts.append(f"<del style='background-color: #ffcccc;'>{text}</del>")
+            # Deleted text - show with red background in dest
+            dest_parts.append(f"<del style='background-color: #ffcccc;'>{text}</del>")
         elif op == 1:
-            # Highlight added text with a blue background
+            # Added text - show with blue background in dest
             dest_parts.append(f"<ins style='background-color: #cce5ff;'>{text}</ins>")
-    origin_html = "".join(origin_parts)
     dest_html = "".join(dest_parts)
 
     # Replace newlines with <br> to preserve formatting
-    origin_html = origin_html.replace("\n", "<br>")
     dest_html = dest_html.replace("\n", "<br>")
-
-    # Origin side: wrap lines containing diff tags with a yellow background
-    new_origin_lines = []
-    for line in origin_html.split("<br>"):
-        if "<del" in line or "<ins" in line:
-            new_origin_lines.append(f"<div style='background-color: #ffff99;'>{line}</div>")
-        else:
-            new_origin_lines.append(line)
-    origin_html = "<br>".join(new_origin_lines)
 
     # Destination side: wrap lines containing diff tags with a yellow background
     new_dest_lines = []
@@ -218,12 +205,8 @@ def generate_side_by_side_html(origin_data, dest_data):
             new_dest_lines.append(line)
     dest_html = "<br>".join(new_dest_lines)
 
-    html = f"""<table class="table table-bordered" style="width:100%; border-collapse: collapse;">
-  <tr>
-    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{origin_html}</td>
-    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{dest_html}</td>
-  </tr>
-</table>"""
+    # Return only the dest content wrapped in a simple pre-formatted div
+    html = f"""<div style="white-space: pre-wrap;">{dest_html}</div>"""
     return html
 
 # --- Capture endpoint for individual host ---
