@@ -1,9 +1,23 @@
 #!/usr/bin/env python3
-import os
+"""
+Copyright 2025 Nwdiff Contributors
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+This file was created or modified with the assistance of an AI (Large Language Model).
+Review required for correctness, security, and licensing.
+"""
+
 import csv
 import datetime
-import difflib
-from flask import Flask, render_template, request, redirect, url_for
+import os
+
+from flask import Flask, redirect, render_template, request, url_for
 from diff_match_patch import diff_match_patch
 from netmiko import ConnectHandler
 
@@ -34,14 +48,13 @@ DEVICE_COMMANDS = {
     ),
 }
 # Default commands if model does not match
-DEFAULT_COMMANDS = (
-    "show version",
-)
+DEFAULT_COMMANDS = ("show version",)
 
 # Create required directories if they do not exist
 os.makedirs(ORIGIN_DIR, exist_ok=True)
 os.makedirs(DEST_DIR, exist_ok=True)
 os.makedirs(DIFF_DIR, exist_ok=True)
+
 
 # --- Helper function to read CSV and skip comment lines ---
 def read_hosts_csv():
@@ -50,9 +63,10 @@ def read_hosts_csv():
     Returns a list of dictionaries (CSV rows).
     """
     with open(HOSTS_CSV, newline="", encoding="utf-8") as csvfile:
-        filtered = (line for line in csvfile if not line.lstrip().startswith('#'))
+        filtered = (line for line in csvfile if not line.lstrip().startswith("#"))
         reader = csv.DictReader(filtered)
         return list(reader)
+
 
 # --- Helper function to get device info from CSV ---
 def get_device_info(host):
@@ -65,6 +79,7 @@ def get_device_info(host):
         if row["host"] == host:
             return row
     return None
+
 
 # --- Helper function to get command list based on device model ---
 def get_commands_for_host(host):
@@ -79,6 +94,7 @@ def get_commands_for_host(host):
             return DEVICE_COMMANDS.get(model, DEFAULT_COMMANDS)
     return DEFAULT_COMMANDS
 
+
 # --- Helper function to get file modification time ---
 def get_file_mtime(filepath):
     """
@@ -86,8 +102,11 @@ def get_file_mtime(filepath):
     or 'file not found' if the file does not exist.
     """
     if os.path.exists(filepath):
-        return datetime.datetime.fromtimestamp(os.path.getmtime(filepath)).strftime("%Y-%m-%d %H:%M:%S")
+        return datetime.datetime.fromtimestamp(os.path.getmtime(filepath)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
     return "file not found"
+
 
 # --- Helper functions for file paths ---
 def get_file_path(host, command, base):
@@ -104,6 +123,7 @@ def get_file_path(host, command, base):
     else:
         raise ValueError("Invalid base")
 
+
 def get_diff_file_path(host, command):
     """
     Constructs the path for the diff file.
@@ -111,6 +131,7 @@ def get_diff_file_path(host, command):
     safe_command = command.replace(" ", "_")
     filename = f"{host}-{safe_command}-diff.html"
     return os.path.join(DIFF_DIR, filename)
+
 
 # --- Helper function to compute diff status only ---
 def compute_diff_status(origin_data, dest_data):
@@ -125,6 +146,7 @@ def compute_diff_status(origin_data, dest_data):
         return "identical"
     return "changes detected"
 
+
 # --- Helper function to compute diff HTML and status ---
 def compute_diff(origin_data, dest_data, view="inline"):
     """
@@ -136,7 +158,7 @@ def compute_diff(origin_data, dest_data, view="inline"):
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
     dmp.diff_cleanupSemantic(diffs)
-    
+
     if all(op == 0 for op, text in diffs):
         status = "identical"
         if view == "sidebyside":
@@ -151,21 +173,28 @@ def compute_diff(origin_data, dest_data, view="inline"):
             raw_diff_html = dmp.diff_prettyHtml(diffs)
             # Replace ¶ and &para; with line breaks
             inline_html = raw_diff_html.replace("¶", "<br>").replace("&para;", "")
-            
+
             # Update at character level: add inline background color for diff tags
-            inline_html = inline_html.replace("<del>", '<del style="background-color: #ffcccc;">')
-            inline_html = inline_html.replace("<ins>", '<ins style="background-color: #cce5ff;">')
-            
+            inline_html = inline_html.replace(
+                "<del>", '<del style="background-color: #ffcccc;">'
+            )
+            inline_html = inline_html.replace(
+                "<ins>", '<ins style="background-color: #cce5ff;">'
+            )
+
             # Highlight entire lines that contain diff tags with a yellow background
             lines = inline_html.split("<br>")
             new_lines = []
             for line in lines:
                 if "<del" in line or "<ins" in line:
-                    new_lines.append(f'<div style="background-color: #ffff99;">{line}</div>')
+                    new_lines.append(
+                        f'<div style="background-color: #ffff99;">{line}</div>'
+                    )
                 else:
                     new_lines.append(line)
             diff_html = "<br>".join(new_lines)
     return status, diff_html
+
 
 # --- Function to generate side-by-side diff HTML ---
 def generate_side_by_side_html(origin_data, dest_data):
@@ -204,7 +233,9 @@ def generate_side_by_side_html(origin_data, dest_data):
     new_origin_lines = []
     for line in origin_html.split("<br>"):
         if "<del" in line or "<ins" in line:
-            new_origin_lines.append(f"<div style='background-color: #ffff99;'>{line}</div>")
+            new_origin_lines.append(
+                f"<div style='background-color: #ffff99;'>{line}</div>"
+            )
         else:
             new_origin_lines.append(line)
     origin_html = "<br>".join(new_origin_lines)
@@ -213,7 +244,9 @@ def generate_side_by_side_html(origin_data, dest_data):
     new_dest_lines = []
     for line in dest_html.split("<br>"):
         if "<del" in line or "<ins" in line:
-            new_dest_lines.append(f"<div style='background-color: #ffff99;'>{line}</div>")
+            new_dest_lines.append(
+                f"<div style='background-color: #ffff99;'>{line}</div>"
+            )
         else:
             new_dest_lines.append(line)
     dest_html = "<br>".join(new_dest_lines)
@@ -225,6 +258,7 @@ def generate_side_by_side_html(origin_data, dest_data):
   </tr>
 </table>"""
     return html
+
 
 # --- Capture endpoint for individual host ---
 @app.route("/capture/<base>/<hostname>")
@@ -264,8 +298,9 @@ def capture(base, hostname):
 
         connection.disconnect()
         return redirect(url_for("host_list"))
-    except Exception as e:
-        return f"Failed to capture data: {str(e)}", 500
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return f"Failed to capture data: {exc}", 500
+
 
 # --- New endpoint: Capture for all devices ---
 @app.route("/capture_all/<base>")
@@ -304,11 +339,12 @@ def capture_all(base):
                     f.write(output)
 
             connection.disconnect()
-        except Exception as e:
-            print(f"Error capturing data for {hostname}: {e}")
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            print(f"Error capturing data for {hostname}: {exc}")
             # Continue with next device
 
     return redirect(url_for("host_list"))
+
 
 # --- Host List page ---
 @app.route("/")
@@ -325,7 +361,9 @@ def host_list():
         for command in commands:
             origin_path = get_file_path(host, command, "origin")
             dest_path = get_file_path(host, command, "dest")
-            origin_info.append({"command": command, "mtime": get_file_mtime(origin_path)})
+            origin_info.append(
+                {"command": command, "mtime": get_file_mtime(origin_path)}
+            )
             dest_info.append({"command": command, "mtime": get_file_mtime(dest_path)})
             if os.path.exists(origin_path) and os.path.exists(dest_path):
                 with open(origin_path, encoding="utf-8") as f:
@@ -336,14 +374,17 @@ def host_list():
             else:
                 status = "file not found"
             diff_info.append({"command": command, "status": status})
-        hosts.append({
-            "host": host,
-            "ip": ip,
-            "origin_info": origin_info,
-            "dest_info": dest_info,
-            "diff_info": diff_info,
-        })
+        hosts.append(
+            {
+                "host": host,
+                "ip": ip,
+                "origin_info": origin_info,
+                "dest_info": dest_info,
+                "diff_info": diff_info,
+            }
+        )
     return render_template("host_list.html", hosts=hosts)
+
 
 # --- Host Detail page ---
 @app.route("/host/<hostname>")
@@ -380,22 +421,27 @@ def host_detail(hostname):
         try:
             with open(diff_file_path, "w", encoding="utf-8") as diff_file:
                 diff_file.write(diff_html)
-        except Exception as e:
-            print(f"Error writing diff file for {hostname} {command}: {e}")
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            print(f"Error writing diff file for {hostname} {command}: {exc}")
 
-        command_results.append({
-            "command": command,
-            "origin_mtime": origin_mtime,
-            "dest_mtime": dest_mtime,
-            "diff_status": diff_status,
-            "diff_html": diff_html,
-        })
+        command_results.append(
+            {
+                "command": command,
+                "origin_mtime": origin_mtime,
+                "dest_mtime": dest_mtime,
+                "diff_status": diff_status,
+                "diff_html": diff_html,
+            }
+        )
     toggle_view = "sidebyside" if view == "inline" else "inline"
-    return render_template("host_detail.html",
-                           hostname=hostname,
-                           command_results=command_results,
-                           view=view,
-                           toggle_view=toggle_view)
+    return render_template(
+        "host_detail.html",
+        hostname=hostname,
+        command_results=command_results,
+        view=view,
+        toggle_view=toggle_view,
+    )
+
 
 # --- Compare files between two hosts (origin/dest) ---
 @app.route("/compare_files", methods=["GET", "POST"])
@@ -414,7 +460,7 @@ def compare_files():
         base = request.form.get("base")
         command = request.form.get("command")
         view = request.form.get("view", "sidebyside")
-        
+
         if not host1 or not host2 or not base or not command:
             error = "All fields are required."
         else:
@@ -434,7 +480,14 @@ def compare_files():
                     status = compute_diff_status(data1, data2)
                 else:
                     status, diff_html = compute_diff(data1, data2, view)
-    return render_template("compare_files.html", hosts=hosts, error=error, diff_html=diff_html, status=status)
+    return render_template(
+        "compare_files.html",
+        hosts=hosts,
+        error=error,
+        diff_html=diff_html,
+        status=status,
+    )
+
 
 if __name__ == "__main__":
     app.run(debug=True)

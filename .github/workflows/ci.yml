@@ -34,10 +34,10 @@ jobs:
           python -m pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Format check (Black)
-        run: black --check tests
+        run: black --check app.py tests
 
       - name: Lint (Pylint)
-        run: pylint tests
+        run: pylint app.py tests
 
       - name: Static analysis (mypy)
         run: mypy tests
