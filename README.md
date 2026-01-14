@@ -66,3 +66,23 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
 
 4. **Review Diff Results:**  
    The computed diff HTML files are stored in the `diff` directory for offline viewing.
+
+## Development
+
+1. **Install development dependencies:**
+   ```bash
+   pip install -r requirements.txt -r requirements-dev.txt
+   ```
+
+2. **Format, lint, type check, and test:**
+   ```bash
+   black tests
+   pylint tests
+   mypy tests
+   pytest
+   ```
+
+3. **Run pre-commit hooks:**
+   ```bash
+   pre-commit run --all-files
+   ```
