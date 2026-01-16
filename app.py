@@ -489,5 +489,78 @@ def compare_files():
     )
 
 
+# --- Export diff HTML for a host ---
+@app.route("/export/<hostname>")
+def export_diff(hostname):
+    """
+    Generates and returns a downloadable HTML file containing all diff results
+    for the specified hostname.
+    """
+    from flask import make_response
+
+    commands = get_commands_for_host(hostname)
+    device_info = get_device_info(hostname)
+    if not device_info:
+        return "Host not found", 404
+
+    # Generate HTML content
+    html_parts = [
+        "<!DOCTYPE html>",
+        "<html lang='en'>",
+        "<head>",
+        "<meta charset='UTF-8'>",
+        "<title>Diff Export - {}</title>".format(hostname),
+        "<link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css'>",
+        "</head>",
+        "<body>",
+        "<div class='container mt-4'>",
+        "<h1>Diff Export for Host: {}</h1>".format(hostname),
+        "<p><strong>IP Address:</strong> {}</p>".format(device_info["ip"]),
+        "<hr>",
+    ]
+
+    for command in commands:
+        origin_path = get_file_path(hostname, command, "origin")
+        dest_path = get_file_path(hostname, command, "dest")
+
+        if os.path.exists(origin_path) and os.path.exists(dest_path):
+            with open(origin_path, encoding="utf-8") as f:
+                origin_data = f.read()
+            with open(dest_path, encoding="utf-8") as f:
+                dest_data = f.read()
+
+            origin_mtime = get_file_mtime(origin_path)
+            dest_mtime = get_file_mtime(dest_path)
+            status, diff_html = compute_diff(origin_data, dest_data, "inline")
+
+            html_parts.append("<div class='card mb-3'>")
+            html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
+            html_parts.append("<div class='card-body'>")
+            html_parts.append("<p><strong>Origin Modified:</strong> {}</p>".format(origin_mtime))
+            html_parts.append("<p><strong>Dest Modified:</strong> {}</p>".format(dest_mtime))
+            if status == "changes detected":
+                html_parts.append("<span style='background-color: #ffff99; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(status))
+            elif status == "identical":
+                html_parts.append("<span style='background-color: #add8e6; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(status))
+            else:
+                html_parts.append("<span class='badge badge-info'>{}</span>".format(status))
+            html_parts.append("<div class='mt-3'>{}</div>".format(diff_html))
+            html_parts.append("</div></div>")
+        else:
+            html_parts.append("<div class='card mb-3'>")
+            html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
+            html_parts.append("<div class='card-body'>")
+            html_parts.append("<p class='text-danger'>Files not found for this command</p>")
+            html_parts.append("</div></div>")
+
+    html_parts.extend(["</div>", "</body>", "</html>"])
+    html_content = "\n".join(html_parts)
+
+    response = make_response(html_content)
+    response.headers["Content-Type"] = "text/html"
+    response.headers["Content-Disposition"] = "attachment; filename={}-diff-export.html".format(hostname)
+    return response
+
+
 if __name__ == "__main__":
     app.run(debug=True)
