@@ -61,7 +61,8 @@ os.makedirs(BACKUP_DIR, exist_ok=True)
 # --- Backup helper functions ---
 def get_backup_filename(filepath):
     """
-    Generates a backup filename with timestamp in format: YYYYMMDD_HHMMSS_hostname-command.txt
+    Generates a backup filename with timestamp.
+    Format: YYYYMMDD_HHMMSS_hostname-command.txt
     """
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = os.path.basename(filepath)

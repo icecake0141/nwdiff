@@ -31,10 +31,13 @@ import app  # pylint: disable=wrong-import-position,import-error
 def test_read_hosts_csv_skips_comments(tmp_path: Path, monkeypatch) -> None:
     """Ensure comment lines are skipped while parsing the hosts CSV."""
     hosts_csv = tmp_path / "hosts.csv"
-    hosts_csv.write_text(
-        """# comment line\nhost,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\nrouter2,10.0.0.2,admin,22,fortinet\n""",
-        encoding="utf-8",
+    csv_content = (
+        "# comment line\n"
+        "host,ip,username,port,model\n"
+        "router1,10.0.0.1,admin,22,cisco\n"
+        "router2,10.0.0.2,admin,22,fortinet\n"
     )
+    hosts_csv.write_text(csv_content, encoding="utf-8")
     monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
 
     rows = app.read_hosts_csv()
