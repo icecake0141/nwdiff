@@ -170,16 +170,16 @@ def get_file_mtime(filepath):
 def get_file_path(host, command, base):
     """
     base: "origin" or "dest"
-    Constructs the filename using the host and command (spaces replaced with underscores).
+    Constructs the filename using the host and command
+    (spaces replaced with underscores).
     """
     safe_command = command.replace(" ", "_")
     filename = f"{host}-{safe_command}.txt"
     if base == "origin":
         return os.path.join(ORIGIN_DIR, filename)
-    elif base == "dest":
+    if base == "dest":
         return os.path.join(DEST_DIR, filename)
-    else:
-        raise ValueError("Invalid base")
+    raise ValueError("Invalid base")
 
 
 def get_diff_file_path(host, command):
@@ -210,8 +210,10 @@ def compute_diff(origin_data, dest_data, view="inline"):
     """
     Computes diff information using diff_match_patch.
     For inline view:
-      - If a line contains any diff tags, the entire line is highlighted with a yellow background.
-      - Additionally, text within <del> tags gets a red background and text within <ins> tags gets a blue background.
+      - If a line contains any diff tags, the entire line is
+        highlighted with a yellow background.
+      - Additionally, text within <del> tags gets a red background
+        and text within <ins> tags gets a blue background.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
@@ -257,12 +259,15 @@ def compute_diff(origin_data, dest_data, view="inline"):
 # --- Function to generate side-by-side diff HTML ---
 def generate_side_by_side_html(origin_data, dest_data):
     """
-    Generates side-by-side HTML displaying the origin content (common parts plus deletions)
-    on the left and the destination content (common parts plus insertions) on the right.
+    Generates side-by-side HTML displaying the origin content
+    (common parts plus deletions) on the left and the destination
+    content (common parts plus insertions) on the right.
     For each column:
-      - At the character level, text in <del> tags is highlighted with a red background
-        and text in <ins> tags with a blue background.
-      - At the line level, any line containing diff tags is wrapped with a yellow background.
+      - At the character level, text in <del> tags is highlighted
+        with a red background and text in <ins> tags with a blue
+        background.
+      - At the line level, any line containing diff tags is wrapped
+        with a yellow background.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
@@ -309,12 +314,17 @@ def generate_side_by_side_html(origin_data, dest_data):
             new_dest_lines.append(line)
     dest_html = "<br>".join(new_dest_lines)
 
-    html = f"""<table class="table table-bordered" style="width:100%; border-collapse: collapse;">
-  <tr>
-    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{origin_html}</td>
-    <td style="vertical-align: top; width:50%; white-space: pre-wrap;">{dest_html}</td>
-  </tr>
-</table>"""
+    html = (
+        '<table class="table table-bordered" '
+        'style="width:100%; border-collapse: collapse;">\n'
+        "  <tr>\n"
+        f'    <td style="vertical-align: top; width:50%; '
+        f'white-space: pre-wrap;">{origin_html}</td>\n'
+        f'    <td style="vertical-align: top; width:50%; '
+        f'white-space: pre-wrap;">{dest_html}</td>\n'
+        "  </tr>\n"
+        "</table>"
+    )
     return html
 
 
@@ -322,10 +332,11 @@ def generate_side_by_side_html(origin_data, dest_data):
 @app.route("/capture/<base>/<hostname>")
 def capture(base, hostname):
     """
-    Triggered when clicking the "Capture Origin" or "Capture Dest" button on the host list page.
-    Establishes a single connection to the target device and retrieves output for each command
-    (based on the device's model) before disconnecting.
-    CSV reading ignores comment lines.
+    Triggered when clicking the "Capture Origin" or "Capture Dest"
+    button on the host list page.
+    Establishes a single connection to the target device and retrieves
+    output for each command (based on the device's model) before
+    disconnecting. CSV reading ignores comment lines.
     """
     if base not in ["origin", "dest"]:
         return "Invalid capture type", 400
@@ -409,6 +420,7 @@ def capture_all(base):
 # --- Host List page ---
 @app.route("/")
 def host_list():
+    """Display the list of hosts with their capture status."""
     hosts = []
     rows = read_hosts_csv()  # CSV reading ignores comment lines
     for row in rows:
@@ -449,6 +461,7 @@ def host_list():
 # --- Host Detail page ---
 @app.route("/host/<hostname>")
 def host_detail(hostname):
+    """Display detailed diff information for a specific host."""
     view = request.args.get("view", "inline")
     command_results = []
     commands = get_commands_for_host(hostname)
