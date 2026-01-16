@@ -73,6 +73,9 @@ def rotate_backups(filepath):
     Keeps only the last 10 backups for a given file.
     Deletes older backups beyond the 10 most recent.
     """
+    if not os.path.exists(BACKUP_DIR):
+        return
+
     filename = os.path.basename(filepath)
     # Find all backups for this file
     backup_files = []
