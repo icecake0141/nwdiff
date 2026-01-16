@@ -12,6 +12,21 @@
     <a href="{{ url_for('compare_files') }}" class="btn btn-info btn-lg">Compare Files</a>
 </div>
 
+<!-- Search and Filter Controls -->
+<div class="row mb-3">
+    <div class="col-md-6">
+        <input type="text" id="searchInput" class="form-control" placeholder="Search by hostname or IP address...">
+    </div>
+    <div class="col-md-6">
+        <select id="statusFilter" class="form-control">
+            <option value="all">All Devices</option>
+            <option value="changes detected">Changes Detected</option>
+            <option value="identical">Identical</option>
+            <option value="file not found">File Not Found</option>
+        </select>
+    </div>
+</div>
+
 <table class="table table-striped table-bordered">
     <thead class="thead-dark">
         <tr>
@@ -23,9 +38,9 @@
             <th>Actions</th>
         </tr>
     </thead>
-    <tbody>
+    <tbody id="hostTableBody">
     {% for host in hosts %}
-        <tr>
+        <tr class="host-row" data-hostname="{{ host.host }}" data-ip="{{ host.ip }}" data-status="{% for item in host.diff_info %}{{ item.status }}{% if not loop.last %},{% endif %}{% endfor %}">
             <td>{{ host.host }}</td>
             <td>{{ host.ip }}</td>
             <td>
@@ -64,4 +79,44 @@
     {% endfor %}
     </tbody>
 </table>
+
+<script>
+// Real-time search and filter functionality
+(function() {
+    const searchInput = document.getElementById('searchInput');
+    const statusFilter = document.getElementById('statusFilter');
+    const hostRows = document.querySelectorAll('.host-row');
+
+    function filterHosts() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const statusValue = statusFilter.value;
+
+        hostRows.forEach(function(row) {
+            const hostname = row.getAttribute('data-hostname').toLowerCase();
+            const ip = row.getAttribute('data-ip').toLowerCase();
+            const statuses = row.getAttribute('data-status').toLowerCase();
+
+            // Check search term (hostname or IP)
+            const matchesSearch = hostname.includes(searchTerm) || ip.includes(searchTerm);
+
+            // Check status filter
+            let matchesStatus = true;
+            if (statusValue !== 'all') {
+                matchesStatus = statuses.includes(statusValue.toLowerCase());
+            }
+
+            // Show/hide row based on both criteria
+            if (matchesSearch && matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // Add event listeners
+    searchInput.addEventListener('input', filterHosts);
+    statusFilter.addEventListener('change', filterHosts);
+})();
+</script>
 {% endblock %}
