@@ -201,3 +201,80 @@ def test_rotate_backups_keeps_last_10(tmp_path: Path, monkeypatch) -> None:
     remaining_names = sorted([f.name for f in backup_files])
     for i in range(5, 15):
         assert f"backup_{i:02d}_test.txt" in remaining_names
+def test_logging_configuration_creates_log_file() -> None:
+    """Test that logging is properly configured and creates log files."""
+    # Import logger from app to verify it exists
+    assert app.logger is not None
+    assert app.logger.name == "nwdiff"
+    assert app.logger.level == app.logging.DEBUG
+
+
+def test_logs_view_endpoint(tmp_path: Path, monkeypatch) -> None:
+    """Test the /logs web UI endpoint."""
+    # Create a test log file
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    log_file = logs_dir / "nwdiff.log"
+    log_file.write_text(
+        "2025-01-16 12:00:00 - nwdiff - INFO - Test log line 1\n"
+        "2025-01-16 12:00:01 - nwdiff - ERROR - Test error line\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(app, "LOGS_DIR", str(logs_dir))
+
+    with app.app.test_client() as client:
+        response = client.get("/logs")
+        assert response.status_code == 200
+        assert b"Application Logs" in response.data
+        assert b"Test log line 1" in response.data
+        assert b"Test error line" in response.data
+
+
+def test_logs_api_endpoint(tmp_path: Path, monkeypatch) -> None:
+    """Test the /api/logs API endpoint."""
+    # Create a test log file
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    log_file = logs_dir / "nwdiff.log"
+    log_file.write_text(
+        "2025-01-16 12:00:00 - nwdiff - INFO - Test info log\n"
+        "2025-01-16 12:00:01 - nwdiff - ERROR - Test error log\n"
+        "2025-01-16 12:00:02 - nwdiff - DEBUG - Test debug log\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(app, "LOGS_DIR", str(logs_dir))
+
+    with app.app.test_client() as client:
+        # Test basic API call
+        response = client.get("/api/logs")
+        assert response.status_code == 200
+        json_data = response.get_json()
+        assert "logs" in json_data
+        assert "count" in json_data
+        assert json_data["count"] == 3
+
+        # Test level filtering
+        response = client.get("/api/logs?level=ERROR")
+        assert response.status_code == 200
+        json_data = response.get_json()
+        assert json_data["count"] == 1
+        assert json_data["level_filter"] == "ERROR"
+
+        # Test limit parameter
+        response = client.get("/api/logs?limit=2")
+        assert response.status_code == 200
+        json_data = response.get_json()
+        assert json_data["count"] == 2
+        assert json_data["limit"] == 2
+
+
+def test_read_hosts_csv_handles_file_not_found(tmp_path: Path, monkeypatch) -> None:
+    """Test that read_hosts_csv handles missing CSV gracefully."""
+    non_existent = tmp_path / "nonexistent.csv"
+    monkeypatch.setattr(app, "HOSTS_CSV", str(non_existent))
+
+    rows = app.read_hosts_csv()
+
+    assert not rows

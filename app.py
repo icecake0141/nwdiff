@@ -15,13 +15,48 @@ Review required for correctness, security, and licensing.
 
 import csv
 import datetime
+import logging
+import logging.handlers
 import os
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 from diff_match_patch import diff_match_patch
 from netmiko import ConnectHandler
 
 app = Flask(__name__)
+
+# Configure logging
+LOGS_DIR = "logs"
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+# Create logger
+logger = logging.getLogger("nwdiff")
+logger.setLevel(logging.DEBUG)
+
+# Create rotating file handler (10MB max, keep 5 backup files)
+log_file = os.path.join(LOGS_DIR, "nwdiff.log")
+file_handler = logging.handlers.RotatingFileHandler(
+    log_file, maxBytes=10 * 1024 * 1024, backupCount=5
+)
+file_handler.setLevel(logging.DEBUG)
+
+# Create console handler for development
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+
+# Create formatter using lazy % formatting
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Add handlers to logger
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+logger.info("Nwdiff application starting")
 
 # Directories and CSV file settings
 ORIGIN_DIR = "origin"
@@ -120,10 +155,19 @@ def read_hosts_csv():
     Reads the CSV file while ignoring lines that start with '#' (comments).
     Returns a list of dictionaries (CSV rows).
     """
-    with open(HOSTS_CSV, newline="", encoding="utf-8") as csvfile:
-        filtered = (line for line in csvfile if not line.lstrip().startswith("#"))
-        reader = csv.DictReader(filtered)
-        return list(reader)
+    try:
+        with open(HOSTS_CSV, newline="", encoding="utf-8") as csvfile:
+            filtered = (line for line in csvfile if not line.lstrip().startswith("#"))
+            reader = csv.DictReader(filtered)
+            rows = list(reader)
+            logger.debug("Successfully read %d host(s) from CSV", len(rows))
+            return rows
+    except FileNotFoundError:
+        logger.error("Hosts CSV file not found: %s", HOSTS_CSV)
+        return []
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Error reading hosts CSV file: %s", exc)
+        return []
 
 
 # --- Helper function to get device info from CSV ---
@@ -135,7 +179,9 @@ def get_device_info(host):
     rows = read_hosts_csv()
     for row in rows:
         if row["host"] == host:
+            logger.debug("Found device info for host: %s", host)
             return row
+    logger.warning("Device info not found for host: %s", host)
     return None
 
 
@@ -210,10 +256,10 @@ def compute_diff(origin_data, dest_data, view="inline"):
     """
     Computes diff information using diff_match_patch.
     For inline view:
-      - If a line contains any diff tags, the entire line is
-        highlighted with a yellow background.
-      - Additionally, text within <del> tags gets a red background
-        and text within <ins> tags gets a blue background.
+      - If a line contains any diff tags, the entire line is highlighted
+        with a yellow background.
+      - Additionally, text within <del> tags gets a red background and
+        text within <ins> tags gets a blue background.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
@@ -325,6 +371,16 @@ def generate_side_by_side_html(origin_data, dest_data):
         "  </tr>\n"
         "</table>"
     )
+    # Build the side-by-side table HTML
+    table_class = "table table-bordered"
+    table_style = "width:100%; border-collapse: collapse;"
+    td_style = "vertical-align: top; width:50%; white-space: pre-wrap;"
+    html = f"""<table class="{table_class}" style="{table_style}">
+  <tr>
+    <td style="{td_style}">{origin_html}</td>
+    <td style="{td_style}">{dest_html}</td>
+  </tr>
+</table>"""
     return html
 
 
@@ -338,12 +394,16 @@ def capture(base, hostname):
     output for each command (based on the device's model) before
     disconnecting. CSV reading ignores comment lines.
     """
+    logger.info("Capture request received for host=%s, base=%s", hostname, base)
+
     if base not in ["origin", "dest"]:
+        logger.error("Invalid capture type requested: %s", base)
         return "Invalid capture type", 400
 
     commands = get_commands_for_host(hostname)
     device_info = get_device_info(hostname)
     if not device_info:
+        logger.error("Could not find device info in CSV for host: %s", hostname)
         return "Could not find device info in CSV for host: " + hostname
 
     device = {
@@ -354,21 +414,35 @@ def capture(base, hostname):
         "password": os.environ.get("DEVICE_PASSWORD", "your_password"),
     }
 
+    logger.info(
+        "Connecting to device: %s (IP: %s, Type: %s)",
+        hostname,
+        device_info["ip"],
+        device_info["model"],
+    )
+
     try:
         connection = ConnectHandler(**device)
+        logger.debug("Connection established to %s", hostname)
         connection.enable()
 
         # Execute all commands in a single session
         for command in commands:
+            logger.debug("Executing command on %s: %s", hostname, command)
             output = connection.send_command(command)
             filepath = get_file_path(hostname, command, base)
             create_backup(filepath)
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(output)
+            logger.debug("Saved output for %s to: %s", command, filepath)
 
         connection.disconnect()
+        logger.info(
+            "Successfully captured data for %s (%d commands)", hostname, len(commands)
+        )
         return redirect(url_for("host_list"))
     except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Failed to capture data from %s: %s", hostname, exc, exc_info=True)
         return f"Failed to capture data: {exc}", 500
 
 
@@ -380,15 +454,26 @@ def capture_all(base):
     Establishes a connection for each device and retrieves the output for each command.
     CSV reading ignores comment lines.
     """
+    logger.info("Capture all request received for base=%s", base)
+
     if base not in ["origin", "dest"]:
+        logger.error("Invalid capture type requested: %s", base)
         return "Invalid capture type", 400
 
     rows = read_hosts_csv()
+    total_hosts = len(rows)
+    success_count = 0
+    failure_count = 0
+
+    logger.info("Starting capture for %d device(s)", total_hosts)
+
     for row in rows:
         hostname = row["host"]
         commands = get_commands_for_host(hostname)
         device_info = get_device_info(hostname)
         if not device_info:
+            logger.warning("Skipping host %s - device info not found", hostname)
+            failure_count += 1
             continue
 
         device = {
@@ -398,29 +483,58 @@ def capture_all(base):
             "port": device_info["port"],
             "password": os.environ.get("DEVICE_PASSWORD", "your_password"),
         }
+
+        logger.info(
+            "Connecting to device: %s (IP: %s, Type: %s)",
+            hostname,
+            device_info["ip"],
+            device_info["model"],
+        )
+
         try:
             connection = ConnectHandler(**device)
+            logger.debug("Connection established to %s", hostname)
             connection.enable()
 
             for command in commands:
+                logger.debug("Executing command on %s: %s", hostname, command)
                 output = connection.send_command(command)
                 filepath = get_file_path(hostname, command, base)
                 create_backup(filepath)
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(output)
+                logger.debug("Saved output for %s to: %s", command, filepath)
 
             connection.disconnect()
+            logger.info(
+                "Successfully captured data for %s (%d commands)",
+                hostname,
+                len(commands),
+            )
+            success_count += 1
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            print(f"Error capturing data for {hostname}: {exc}")
+            logger.error(
+                "Error capturing data for %s: %s", hostname, exc, exc_info=True
+            )
+            failure_count += 1
             # Continue with next device
 
+    logger.info(
+        "Capture all completed: %d successful, %d failed, %d total",
+        success_count,
+        failure_count,
+        total_hosts,
+    )
     return redirect(url_for("host_list"))
 
 
 # --- Host List page ---
 @app.route("/")
 def host_list():
-    """Display the list of hosts with their capture status."""
+    """
+    Displays the main host list page showing all devices and their status.
+    """
+    logger.debug("Host list page requested")
     hosts = []
     rows = read_hosts_csv()  # CSV reading ignores comment lines
     for row in rows:
@@ -455,13 +569,17 @@ def host_list():
                 "diff_info": diff_info,
             }
         )
+    logger.debug("Rendered host list with %d host(s)", len(hosts))
     return render_template("host_list.html", hosts=hosts)
 
 
 # --- Host Detail page ---
 @app.route("/host/<hostname>")
 def host_detail(hostname):
-    """Display detailed diff information for a specific host."""
+    """
+    Displays detailed diff view for a specific host.
+    """
+    logger.info("Host detail page requested for: %s", hostname)
     view = request.args.get("view", "inline")
     command_results = []
     commands = get_commands_for_host(hostname)
@@ -487,15 +605,32 @@ def host_detail(hostname):
         if origin_data is None or dest_data is None:
             diff_status = "file not found"
             diff_html = ""
+            logger.warning(
+                "Missing files for diff comparison on %s - command: %s",
+                hostname,
+                command,
+            )
         else:
             diff_status, diff_html = compute_diff(origin_data, dest_data, view)
+            logger.debug(
+                "Computed diff for %s - command: %s, status: %s",
+                hostname,
+                command,
+                diff_status,
+            )
         # Save the diff file for later review
         diff_file_path = get_diff_file_path(hostname, command)
         try:
             with open(diff_file_path, "w", encoding="utf-8") as diff_file:
                 diff_file.write(diff_html)
+            logger.debug("Saved diff file: %s", diff_file_path)
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            print(f"Error writing diff file for {hostname} {command}: {exc}")
+            logger.error(
+                "Error writing diff file for %s %s: %s",
+                hostname,
+                command,
+                exc,
+            )
 
         command_results.append(
             {
@@ -507,6 +642,9 @@ def host_detail(hostname):
             }
         )
     toggle_view = "sidebyside" if view == "inline" else "inline"
+    logger.debug(
+        "Rendered host detail for %s with %d command(s)", hostname, len(command_results)
+    )
     return render_template(
         "host_detail.html",
         hostname=hostname,
@@ -528,6 +666,7 @@ def compare_files():
     diff_html = None
     status = None
     if request.method == "POST":
+        logger.info("File comparison requested")
         host1 = request.form.get("host1")
         host2 = request.form.get("host2")
         base = request.form.get("base")
@@ -536,13 +675,16 @@ def compare_files():
 
         if not host1 or not host2 or not base or not command:
             error = "All fields are required."
+            logger.warning("File comparison failed: missing required fields")
         else:
             path1 = get_file_path(host1, command, base)
             path2 = get_file_path(host2, command, base)
             if not os.path.exists(path1):
                 error = f"File for {host1} not found: {path1}"
+                logger.error("File not found for comparison: %s", path1)
             elif not os.path.exists(path2):
                 error = f"File for {host2} not found: {path2}"
+                logger.error("File not found for comparison: %s", path2)
             else:
                 with open(path1, encoding="utf-8") as f:
                     data1 = f.read()
@@ -553,12 +695,103 @@ def compare_files():
                     status = compute_diff_status(data1, data2)
                 else:
                     status, diff_html = compute_diff(data1, data2, view)
+                logger.info(
+                    "File comparison completed: %s vs %s, status: %s",
+                    host1,
+                    host2,
+                    status,
+                )
     return render_template(
         "compare_files.html",
         hosts=hosts,
         error=error,
         diff_html=diff_html,
         status=status,
+    )
+
+
+# --- Logs Web UI ---
+@app.route("/logs")
+def logs_view():
+    """
+    Web UI for viewing logs.
+    Displays the most recent log entries with real-time updates.
+    """
+    logger.debug("Logs view page requested")
+    # Read the last 1000 lines from the log file
+    log_file_path = os.path.join(LOGS_DIR, "nwdiff.log")
+    lines = []
+    try:
+        if os.path.exists(log_file_path):
+            with open(log_file_path, "r", encoding="utf-8") as f:
+                all_lines = f.readlines()
+                lines = all_lines[-1000:]  # Get last 1000 lines
+        else:
+            logger.warning("Log file does not exist yet: %s", log_file_path)
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Error reading log file: %s", exc)
+        lines = [f"Error reading log file: {exc}"]
+
+    return render_template("logs.html", log_lines=lines)
+
+
+# --- Logs API Endpoint ---
+@app.route("/api/logs")
+def logs_api():
+    """
+    API endpoint for programmatic access to logs.
+    Returns logs in JSON format.
+
+    Query parameters:
+    - level: Filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    - limit: Maximum number of lines to return (default: 1000, max: 10000)
+    - tail: If true, return the last N lines (default: true)
+    """
+    logger.debug("Logs API endpoint requested")
+
+    # Get query parameters
+    level_filter = request.args.get("level", "").upper()
+    try:
+        limit = int(request.args.get("limit", "1000"))
+        limit = min(limit, 10000)  # Max 10000 lines
+    except ValueError:
+        limit = 1000
+
+    tail = request.args.get("tail", "true").lower() == "true"
+
+    log_file_path = os.path.join(LOGS_DIR, "nwdiff.log")
+    log_entries = []
+
+    try:
+        if os.path.exists(log_file_path):
+            with open(log_file_path, "r", encoding="utf-8") as f:
+                all_lines = f.readlines()
+
+                # Get lines based on tail parameter
+                if tail:
+                    lines = all_lines[-limit:]
+                else:
+                    lines = all_lines[:limit]
+
+                # Filter by level if specified
+                for line in lines:
+                    if level_filter and level_filter not in line:
+                        continue
+                    log_entries.append(line.rstrip())
+        else:
+            logger.warning("Log file does not exist yet: %s", log_file_path)
+
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Error reading log file for API: %s", exc)
+        return jsonify({"error": f"Error reading log file: {exc}", "logs": []}), 500
+
+    return jsonify(
+        {
+            "logs": log_entries,
+            "count": len(log_entries),
+            "level_filter": level_filter if level_filter else None,
+            "limit": limit,
+        }
     )
 
 
