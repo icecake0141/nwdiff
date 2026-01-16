@@ -301,13 +301,14 @@ def generate_side_by_side_html(origin_data, dest_data):
             new_dest_lines.append(line)
     dest_html = "<br>".join(new_dest_lines)
 
-    html = f"""<table class="table table-bordered" \
-style="width:100%; border-collapse: collapse;">
+    # Build the side-by-side table HTML
+    table_class = "table table-bordered"
+    table_style = "width:100%; border-collapse: collapse;"
+    td_style = "vertical-align: top; width:50%; white-space: pre-wrap;"
+    html = f"""<table class="{table_class}" style="{table_style}">
   <tr>
-    <td style="vertical-align: top; width:50%; \
-white-space: pre-wrap;">{origin_html}</td>
-    <td style="vertical-align: top; width:50%; \
-white-space: pre-wrap;">{dest_html}</td>
+    <td style="{td_style}">{origin_html}</td>
+    <td style="{td_style}">{dest_html}</td>
   </tr>
 </table>"""
     return html
