@@ -502,8 +502,8 @@ def export_diff(hostname):
     if not device_info:
         return "Host not found", 404
 
-    # Sanitize hostname for use in filename
-    safe_hostname = re.sub(r'[^\w\-.]', '_', hostname)
+    # Sanitize hostname for use in filename - remove any characters that could cause path traversal
+    safe_hostname = re.sub(r'[^\w\-]', '_', hostname)
 
     # Generate HTML content
     html_parts = [
@@ -526,28 +526,35 @@ def export_diff(hostname):
         dest_path = get_file_path(hostname, command, "dest")
 
         if os.path.exists(origin_path) and os.path.exists(dest_path):
-            with open(origin_path, encoding="utf-8") as f:
-                origin_data = f.read()
-            with open(dest_path, encoding="utf-8") as f:
-                dest_data = f.read()
+            try:
+                with open(origin_path, encoding="utf-8") as f:
+                    origin_data = f.read()
+                with open(dest_path, encoding="utf-8") as f:
+                    dest_data = f.read()
 
-            origin_mtime = get_file_mtime(origin_path)
-            dest_mtime = get_file_mtime(dest_path)
-            status, diff_html = compute_diff(origin_data, dest_data, "inline")
+                origin_mtime = get_file_mtime(origin_path)
+                dest_mtime = get_file_mtime(dest_path)
+                status, diff_html = compute_diff(origin_data, dest_data, "inline")
 
-            html_parts.append("<div class='card mb-3'>")
-            html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
-            html_parts.append("<div class='card-body'>")
-            html_parts.append("<p><strong>Origin Modified:</strong> {}</p>".format(origin_mtime))
-            html_parts.append("<p><strong>Dest Modified:</strong> {}</p>".format(dest_mtime))
-            if status == "changes detected":
-                html_parts.append("<span style='background-color: #ffff99; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(status))
-            elif status == "identical":
-                html_parts.append("<span style='background-color: #add8e6; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(status))
-            else:
-                html_parts.append("<span class='badge badge-info'>{}</span>".format(status))
-            html_parts.append("<div class='mt-3'>{}</div>".format(diff_html))
-            html_parts.append("</div></div>")
+                html_parts.append("<div class='card mb-3'>")
+                html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
+                html_parts.append("<div class='card-body'>")
+                html_parts.append("<p><strong>Origin Modified:</strong> {}</p>".format(origin_mtime))
+                html_parts.append("<p><strong>Dest Modified:</strong> {}</p>".format(dest_mtime))
+                if status == "changes detected":
+                    html_parts.append("<span style='background-color: #ffff99; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(status))
+                elif status == "identical":
+                    html_parts.append("<span style='background-color: #add8e6; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(status))
+                else:
+                    html_parts.append("<span class='badge badge-info'>{}</span>".format(status))
+                html_parts.append("<div class='mt-3'>{}</div>".format(diff_html))
+                html_parts.append("</div></div>")
+            except (IOError, OSError) as exc:  # pylint: disable=broad-exception-caught
+                html_parts.append("<div class='card mb-3'>")
+                html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
+                html_parts.append("<div class='card-body'>")
+                html_parts.append("<p class='text-danger'>Error reading files: {}</p>".format(str(exc)))
+                html_parts.append("</div></div>")
         else:
             html_parts.append("<div class='card mb-3'>")
             html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
