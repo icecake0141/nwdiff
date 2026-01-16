@@ -37,6 +37,6 @@ function clearDisplay() {
 }
 
 // Auto-refresh logs on page load
-window.onload = refreshLogs;
+document.addEventListener('DOMContentLoaded', refreshLogs);
 </script>
 {% endblock %}

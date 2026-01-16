@@ -639,6 +639,8 @@ def export_diff_json(hostname):
 def get_logs():
     """
     Returns recent log entries for monitoring and debugging.
+    Note: For large log files, consider implementing proper log rotation
+    or using a more efficient approach to read from the end of the file.
     """
     try:
         log_file = os.path.join(LOG_DIR, "nwdiff.log")
@@ -646,6 +648,7 @@ def get_logs():
             return jsonify({"logs": []})
 
         # Read last 100 lines
+        # For production with large log files, use log rotation (e.g., RotatingFileHandler)
         with open(log_file, "r", encoding="utf-8") as f:
             lines = f.readlines()
             recent_logs = lines[-100:]
