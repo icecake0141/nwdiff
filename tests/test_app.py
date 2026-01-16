@@ -198,4 +198,4 @@ def test_read_hosts_csv_handles_file_not_found(tmp_path: Path, monkeypatch) -> N
 
     rows = app.read_hosts_csv()
 
-    assert rows == []
+    assert not rows
