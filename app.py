@@ -17,7 +17,7 @@ import csv
 import datetime
 import os
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 from diff_match_patch import diff_match_patch
 from netmiko import ConnectHandler
 
@@ -487,6 +487,57 @@ def compare_files():
         diff_html=diff_html,
         status=status,
     )
+
+
+# --- JSON Export API endpoint ---
+@app.route("/api/export/<hostname>")
+def export_json(hostname):
+    """
+    JSON export endpoint that returns all command results, timestamps, and diff status
+    for the specified hostname. Validates hostname to prevent security issues.
+    """
+    # Validate hostname exists in CSV
+    device_info = get_device_info(hostname)
+    if not device_info:
+        return jsonify({"error": "Hostname not found"}), 404
+
+    commands = get_commands_for_host(hostname)
+    export_data = {
+        "hostname": hostname,
+        "ip": device_info["ip"],
+        "model": device_info.get("model", ""),
+        "commands": [],
+    }
+
+    for command in commands:
+        origin_path = get_file_path(hostname, command, "origin")
+        dest_path = get_file_path(hostname, command, "dest")
+
+        command_data = {
+            "command": command,
+            "origin": {
+                "timestamp": get_file_mtime(origin_path),
+                "exists": os.path.exists(origin_path),
+            },
+            "dest": {
+                "timestamp": get_file_mtime(dest_path),
+                "exists": os.path.exists(dest_path),
+            },
+        }
+
+        # Compute diff status if both files exist
+        if os.path.exists(origin_path) and os.path.exists(dest_path):
+            with open(origin_path, encoding="utf-8") as f:
+                origin_data = f.read()
+            with open(dest_path, encoding="utf-8") as f:
+                dest_data = f.read()
+            command_data["diff_status"] = compute_diff_status(origin_data, dest_data)
+        else:
+            command_data["diff_status"] = "file not found"
+
+        export_data["commands"].append(command_data)
+
+    return jsonify(export_data)
 
 
 if __name__ == "__main__":
