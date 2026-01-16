@@ -89,20 +89,21 @@
 
     function filterHosts() {
         const searchTerm = searchInput.value.toLowerCase();
-        const statusValue = statusFilter.value;
+        const statusValue = statusFilter.value.toLowerCase();
 
         hostRows.forEach(function(row) {
-            const hostname = row.getAttribute('data-hostname').toLowerCase();
-            const ip = row.getAttribute('data-ip').toLowerCase();
-            const statuses = row.getAttribute('data-status').toLowerCase();
+            const hostname = (row.getAttribute('data-hostname') || '').toLowerCase();
+            const ip = (row.getAttribute('data-ip') || '').toLowerCase();
+            const statuses = (row.getAttribute('data-status') || '').toLowerCase();
 
             // Check search term (hostname or IP)
             const matchesSearch = hostname.includes(searchTerm) || ip.includes(searchTerm);
 
-            // Check status filter
+            // Check status filter - split by comma and check for exact match
             let matchesStatus = true;
             if (statusValue !== 'all') {
-                matchesStatus = statuses.includes(statusValue.toLowerCase());
+                const statusArray = statuses.split(',').map(s => s.trim());
+                matchesStatus = statusArray.includes(statusValue);
             }
 
             // Show/hide row based on both criteria
