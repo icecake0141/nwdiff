@@ -142,7 +142,7 @@ def create_backup(filepath):
 
         # Copy file to backup
         shutil.copy2(filepath, backup_path)
-        logger.info(f"Backup created: {backup_path}")
+        logger.info("Backup created: %s", backup_path)
 
         # Rotate backups - keep only last 10 backups for this file
         backup_files = sorted(
@@ -154,9 +154,9 @@ def create_backup(filepath):
         for old_backup in backup_files[10:]:
             old_path = os.path.join(BACKUP_DIR, old_backup)
             os.remove(old_path)
-            logger.info(f"Old backup removed: {old_path}")
+            logger.info("Old backup removed: %s", old_path)
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error(f"Failed to create backup for {filepath}: {exc}")
+        logger.error("Failed to create backup for %s: %s", filepath, exc)
 
 
 # --- Helper functions for file paths ---
@@ -169,10 +169,9 @@ def get_file_path(host, command, base):
     filename = f"{host}-{safe_command}.txt"
     if base == "origin":
         return os.path.join(ORIGIN_DIR, filename)
-    elif base == "dest":
+    if base == "dest":
         return os.path.join(DEST_DIR, filename)
-    else:
-        raise ValueError("Invalid base")
+    raise ValueError("Invalid base")
 
 
 def get_diff_file_path(host, command):
@@ -337,7 +336,7 @@ def capture(base, hostname):
     }
 
     try:
-        logger.info(f"Starting capture for {hostname} ({base})")
+        logger.info("Starting capture for %s (%s)", hostname, base)
         connection = ConnectHandler(**device)
         connection.enable()
 
@@ -352,13 +351,13 @@ def capture(base, hostname):
 
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(output)
-            logger.info(f"Captured {command} for {hostname} to {filepath}")
+            logger.info("Captured %s for %s to %s", command, hostname, filepath)
 
         connection.disconnect()
-        logger.info(f"Capture completed successfully for {hostname} ({base})")
+        logger.info("Capture completed successfully for %s (%s)", hostname, base)
         return redirect(url_for("host_list"))
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error(f"Failed to capture data for {hostname} ({base}): {exc}")
+        logger.error("Failed to capture data for %s (%s): %s", hostname, base, exc)
         return f"Failed to capture data: {exc}", 500
 
 
@@ -373,7 +372,7 @@ def capture_all(base):
     if base not in ["origin", "dest"]:
         return "Invalid capture type", 400
 
-    logger.info(f"Starting capture_all for {base}")
+    logger.info("Starting capture_all for %s", base)
     rows = read_hosts_csv()
     success_count = 0
     error_count = 0
@@ -383,7 +382,7 @@ def capture_all(base):
         commands = get_commands_for_host(hostname)
         device_info = get_device_info(hostname)
         if not device_info:
-            logger.warning(f"No device info found for {hostname}")
+            logger.warning("No device info found for %s", hostname)
             continue
 
         device = {
@@ -394,7 +393,7 @@ def capture_all(base):
             "password": os.environ.get("DEVICE_PASSWORD", "your_password"),
         }
         try:
-            logger.info(f"Capturing {hostname} ({base})")
+            logger.info("Capturing %s (%s)", hostname, base)
             connection = ConnectHandler(**device)
             connection.enable()
 
@@ -408,18 +407,18 @@ def capture_all(base):
 
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(output)
-                logger.info(f"Captured {command} for {hostname}")
+                logger.info("Captured %s for %s", command, hostname)
 
             connection.disconnect()
             success_count += 1
-            logger.info(f"Successfully captured {hostname}")
+            logger.info("Successfully captured %s", hostname)
         except Exception as exc:  # pylint: disable=broad-exception-caught
             error_count += 1
-            logger.error(f"Error capturing data for {hostname}: {exc}")
+            logger.error("Error capturing data for %s: %s", hostname, exc)
             # Continue with next device
 
     logger.info(
-        f"Capture_all completed: {success_count} succeeded, {error_count} failed"
+        "Capture_all completed: %s succeeded, %s failed", success_count, error_count
     )
     return redirect(url_for("host_list"))
 
@@ -581,6 +580,12 @@ def export_diff_json(hostname):
     Useful for automated processing or external integrations.
     """
     try:
+        # Validate hostname exists in hosts.csv to prevent path traversal
+        device_info = get_device_info(hostname)
+        if not device_info:
+            logger.warning("Export attempted for unknown hostname: %s", hostname)
+            return jsonify({"error": f"Unknown hostname: {hostname}"}), 404
+
         commands = get_commands_for_host(hostname)
         results = []
 
@@ -616,7 +621,7 @@ def export_diff_json(hostname):
                     }
                 )
 
-        logger.info(f"Exported diff results for {hostname}")
+        logger.info("Exported diff results for %s", hostname)
         return jsonify(
             {
                 "hostname": hostname,
@@ -625,7 +630,7 @@ def export_diff_json(hostname):
             }
         )
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error(f"Failed to export diff for {hostname}: {exc}")
+        logger.error("Failed to export diff for %s: %s", hostname, exc)
         return jsonify({"error": str(exc)}), 500
 
 
@@ -647,7 +652,7 @@ def get_logs():
 
         return jsonify({"logs": recent_logs})
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error(f"Failed to read logs: {exc}")
+        logger.error("Failed to read logs: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 

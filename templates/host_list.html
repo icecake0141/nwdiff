@@ -102,6 +102,8 @@ function filterTable() {
     rows.forEach(function(row) {
         var hostname = row.getAttribute('data-hostname').toLowerCase();
         var ip = row.getAttribute('data-ip').toLowerCase();
+        // data-status contains all statuses separated by spaces, so includes() works
+        // to match any host that has at least one command with the selected status
         var status = row.getAttribute('data-status').toLowerCase();
         
         var matchesSearch = hostname.includes(searchText) || ip.includes(searchText);
