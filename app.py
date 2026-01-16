@@ -16,8 +16,9 @@ Review required for correctness, security, and licensing.
 import csv
 import datetime
 import os
+import re
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, make_response, redirect, render_template, request, url_for
 from diff_match_patch import diff_match_patch
 from netmiko import ConnectHandler
 
@@ -496,12 +497,13 @@ def export_diff(hostname):
     Generates and returns a downloadable HTML file containing all diff results
     for the specified hostname.
     """
-    from flask import make_response
-
     commands = get_commands_for_host(hostname)
     device_info = get_device_info(hostname)
     if not device_info:
         return "Host not found", 404
+
+    # Sanitize hostname for use in filename
+    safe_hostname = re.sub(r'[^\w\-.]', '_', hostname)
 
     # Generate HTML content
     html_parts = [
@@ -558,7 +560,7 @@ def export_diff(hostname):
 
     response = make_response(html_content)
     response.headers["Content-Type"] = "text/html"
-    response.headers["Content-Disposition"] = "attachment; filename={}-diff-export.html".format(hostname)
+    response.headers["Content-Disposition"] = "attachment; filename={}-diff-export.html".format(safe_hostname)
     return response
 
 
