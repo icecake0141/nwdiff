@@ -24,6 +24,32 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
 - **Detailed Device View:**  
   Access detailed information for each device through the `/host/<hostname>` endpoint.
 
+### New Improvements
+
+- **Error Logging:**  
+  Comprehensive logging system tracks all operations, errors, and system events.
+  - Logs are stored in the `logs` directory
+  - View logs through the web interface at `/logs`
+  - Access logs via API at `/api/logs`
+
+- **Configuration Backup:**  
+  Automatic backup rotation for captured configurations.
+  - Backups are created before overwriting existing captures
+  - Last 10 backups are retained per file
+  - Backups are stored in the `backup` directory with timestamps
+
+- **Export Functionality:**  
+  Export diff results as JSON for automated processing or external integrations.
+  - Access via `/api/export/<hostname>`
+  - Includes all command results, timestamps, and diff status
+  - Useful for CI/CD pipelines and monitoring systems
+
+- **Search and Filter:**  
+  Enhanced UI with search and filter capabilities.
+  - Search hosts by name or IP address
+  - Filter by diff status (changes detected, identical, file not found)
+  - Real-time filtering without page reload
+
 ## Installation
 
 1. **Clone the repository:**

@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}System Logs{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">System Logs</h1>
+
+<div class="mb-3">
+    <button class="btn btn-primary" onclick="refreshLogs()">Refresh Logs</button>
+    <button class="btn btn-secondary" onclick="clearDisplay()">Clear Display</button>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <pre id="logContent" style="max-height: 600px; overflow-y: auto; background-color: #f8f9fa; padding: 15px;">Loading logs...</pre>
+    </div>
+</div>
+
+<script>
+function refreshLogs() {
+    fetch('{{ url_for("get_logs") }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.logs) {
+                document.getElementById('logContent').textContent = data.logs.join('');
+            } else if (data.error) {
+                document.getElementById('logContent').textContent = 'Error loading logs: ' + data.error;
+            }
+        })
+        .catch(error => {
+            document.getElementById('logContent').textContent = 'Failed to fetch logs: ' + error;
+        });
+}
+
+function clearDisplay() {
+    document.getElementById('logContent').textContent = '';
+}
+
+// Auto-refresh logs on page load
+window.onload = refreshLogs;
+</script>
+{% endblock %}

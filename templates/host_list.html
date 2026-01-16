@@ -12,7 +12,24 @@
     <a href="{{ url_for('compare_files') }}" class="btn btn-info btn-lg">Compare Files</a>
 </div>
 
-<table class="table table-striped table-bordered">
+<!-- Search and Filter Section -->
+<div class="mb-3">
+    <div class="row">
+        <div class="col-md-6">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search by hostname or IP address...">
+        </div>
+        <div class="col-md-6">
+            <select id="statusFilter" class="form-control">
+                <option value="">All Statuses</option>
+                <option value="changes detected">Changes Detected Only</option>
+                <option value="identical">Identical Only</option>
+                <option value="file not found">File Not Found</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<table class="table table-striped table-bordered" id="hostTable">
     <thead class="thead-dark">
         <tr>
             <th>Host</th>
@@ -25,7 +42,7 @@
     </thead>
     <tbody>
     {% for host in hosts %}
-        <tr>
+        <tr class="host-row" data-hostname="{{ host.host }}" data-ip="{{ host.ip }}" data-status="{% for item in host.diff_info %}{{ item.status }} {% endfor %}">
             <td>{{ host.host }}</td>
             <td>{{ host.ip }}</td>
             <td>
@@ -59,9 +76,43 @@
                 <a href="{{ url_for('capture', base='origin', hostname=host.host) }}" class="btn btn-success btn-sm mb-1 capture-btn">Capture Origin</a>
                 <a href="{{ url_for('capture', base='dest', hostname=host.host) }}" class="btn btn-primary btn-sm mb-1 capture-btn">Capture Dest</a>
                 <a href="{{ url_for('host_detail', hostname=host.host) }}" class="btn btn-secondary btn-sm mb-1">View Details</a>
+                <a href="{{ url_for('export_diff_json', hostname=host.host) }}" class="btn btn-warning btn-sm mb-1" title="Export as JSON">Export</a>
             </td>
         </tr>
     {% endfor %}
     </tbody>
 </table>
+
+<script>
+// Search functionality
+document.getElementById('searchInput').addEventListener('keyup', function() {
+    filterTable();
+});
+
+// Status filter functionality
+document.getElementById('statusFilter').addEventListener('change', function() {
+    filterTable();
+});
+
+function filterTable() {
+    var searchText = document.getElementById('searchInput').value.toLowerCase();
+    var statusFilter = document.getElementById('statusFilter').value.toLowerCase();
+    var rows = document.querySelectorAll('.host-row');
+    
+    rows.forEach(function(row) {
+        var hostname = row.getAttribute('data-hostname').toLowerCase();
+        var ip = row.getAttribute('data-ip').toLowerCase();
+        var status = row.getAttribute('data-status').toLowerCase();
+        
+        var matchesSearch = hostname.includes(searchText) || ip.includes(searchText);
+        var matchesStatus = statusFilter === '' || status.includes(statusFilter);
+        
+        if (matchesSearch && matchesStatus) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+</script>
 {% endblock %}

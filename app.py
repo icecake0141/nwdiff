@@ -15,9 +15,11 @@ Review required for correctness, security, and licensing.
 
 import csv
 import datetime
+import logging
 import os
+import shutil
 
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, redirect, render_template, request, url_for, jsonify
 from diff_match_patch import diff_match_patch
 from netmiko import ConnectHandler
 
@@ -27,7 +29,21 @@ app = Flask(__name__)
 ORIGIN_DIR = "origin"
 DEST_DIR = "dest"  # Changed from "dear" to "dest"
 DIFF_DIR = "diff"  # Directory to store diff HTML files
+BACKUP_DIR = "backup"  # Directory to store backups
+LOG_DIR = "logs"  # Directory to store logs
 HOSTS_CSV = "hosts.csv"
+
+# Setup logging
+os.makedirs(LOG_DIR, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(os.path.join(LOG_DIR, "nwdiff.log")),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
 
 # Device model specific command lists
 DEVICE_COMMANDS = {
@@ -54,6 +70,7 @@ DEFAULT_COMMANDS = ("show version",)
 os.makedirs(ORIGIN_DIR, exist_ok=True)
 os.makedirs(DEST_DIR, exist_ok=True)
 os.makedirs(DIFF_DIR, exist_ok=True)
+os.makedirs(BACKUP_DIR, exist_ok=True)
 
 
 # --- Helper function to read CSV and skip comment lines ---
@@ -106,6 +123,40 @@ def get_file_mtime(filepath):
             "%Y-%m-%d %H:%M:%S"
         )
     return "file not found"
+
+
+# --- Helper function to create backup ---
+def create_backup(filepath):
+    """
+    Creates a backup of the file with timestamp.
+    Implements rotation: keeps only last 10 backups per file.
+    """
+    if not os.path.exists(filepath):
+        return
+
+    try:
+        filename = os.path.basename(filepath)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_filename = f"{timestamp}_{filename}"
+        backup_path = os.path.join(BACKUP_DIR, backup_filename)
+
+        # Copy file to backup
+        shutil.copy2(filepath, backup_path)
+        logger.info(f"Backup created: {backup_path}")
+
+        # Rotate backups - keep only last 10 backups for this file
+        backup_files = sorted(
+            [f for f in os.listdir(BACKUP_DIR) if f.endswith(f"_{filename}")],
+            reverse=True,
+        )
+
+        # Remove old backups beyond the 10 most recent
+        for old_backup in backup_files[10:]:
+            old_path = os.path.join(BACKUP_DIR, old_backup)
+            os.remove(old_path)
+            logger.info(f"Old backup removed: {old_path}")
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error(f"Failed to create backup for {filepath}: {exc}")
 
 
 # --- Helper functions for file paths ---
@@ -286,6 +337,7 @@ def capture(base, hostname):
     }
 
     try:
+        logger.info(f"Starting capture for {hostname} ({base})")
         connection = ConnectHandler(**device)
         connection.enable()
 
@@ -293,12 +345,20 @@ def capture(base, hostname):
         for command in commands:
             output = connection.send_command(command)
             filepath = get_file_path(hostname, command, base)
+
+            # Create backup of existing file before overwriting
+            if os.path.exists(filepath):
+                create_backup(filepath)
+
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(output)
+            logger.info(f"Captured {command} for {hostname} to {filepath}")
 
         connection.disconnect()
+        logger.info(f"Capture completed successfully for {hostname} ({base})")
         return redirect(url_for("host_list"))
     except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error(f"Failed to capture data for {hostname} ({base}): {exc}")
         return f"Failed to capture data: {exc}", 500
 
 
@@ -313,12 +373,17 @@ def capture_all(base):
     if base not in ["origin", "dest"]:
         return "Invalid capture type", 400
 
+    logger.info(f"Starting capture_all for {base}")
     rows = read_hosts_csv()
+    success_count = 0
+    error_count = 0
+
     for row in rows:
         hostname = row["host"]
         commands = get_commands_for_host(hostname)
         device_info = get_device_info(hostname)
         if not device_info:
+            logger.warning(f"No device info found for {hostname}")
             continue
 
         device = {
@@ -329,26 +394,42 @@ def capture_all(base):
             "password": os.environ.get("DEVICE_PASSWORD", "your_password"),
         }
         try:
+            logger.info(f"Capturing {hostname} ({base})")
             connection = ConnectHandler(**device)
             connection.enable()
 
             for command in commands:
                 output = connection.send_command(command)
                 filepath = get_file_path(hostname, command, base)
+
+                # Create backup of existing file before overwriting
+                if os.path.exists(filepath):
+                    create_backup(filepath)
+
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(output)
+                logger.info(f"Captured {command} for {hostname}")
 
             connection.disconnect()
+            success_count += 1
+            logger.info(f"Successfully captured {hostname}")
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            print(f"Error capturing data for {hostname}: {exc}")
+            error_count += 1
+            logger.error(f"Error capturing data for {hostname}: {exc}")
             # Continue with next device
 
+    logger.info(
+        f"Capture_all completed: {success_count} succeeded, {error_count} failed"
+    )
     return redirect(url_for("host_list"))
 
 
 # --- Host List page ---
 @app.route("/")
 def host_list():
+    """
+    Renders the main host list page showing all devices with their diff status.
+    """
     hosts = []
     rows = read_hosts_csv()  # CSV reading ignores comment lines
     for row in rows:
@@ -389,6 +470,9 @@ def host_list():
 # --- Host Detail page ---
 @app.route("/host/<hostname>")
 def host_detail(hostname):
+    """
+    Renders detailed view for a specific host with diff results.
+    """
     view = request.args.get("view", "inline")
     command_results = []
     commands = get_commands_for_host(hostname)
@@ -487,6 +571,93 @@ def compare_files():
         diff_html=diff_html,
         status=status,
     )
+
+
+# --- Export diff results as JSON ---
+@app.route("/api/export/<hostname>")
+def export_diff_json(hostname):
+    """
+    Exports all diff results for a hostname as JSON.
+    Useful for automated processing or external integrations.
+    """
+    try:
+        commands = get_commands_for_host(hostname)
+        results = []
+
+        for command in commands:
+            origin_path = get_file_path(hostname, command, "origin")
+            dest_path = get_file_path(hostname, command, "dest")
+
+            if os.path.exists(origin_path) and os.path.exists(dest_path):
+                with open(origin_path, encoding="utf-8") as f:
+                    origin_data = f.read()
+                with open(dest_path, encoding="utf-8") as f:
+                    dest_data = f.read()
+
+                status = compute_diff_status(origin_data, dest_data)
+
+                results.append(
+                    {
+                        "command": command,
+                        "status": status,
+                        "origin_mtime": get_file_mtime(origin_path),
+                        "dest_mtime": get_file_mtime(dest_path),
+                        "origin_data": origin_data,
+                        "dest_data": dest_data,
+                    }
+                )
+            else:
+                results.append(
+                    {
+                        "command": command,
+                        "status": "file not found",
+                        "origin_mtime": get_file_mtime(origin_path),
+                        "dest_mtime": get_file_mtime(dest_path),
+                    }
+                )
+
+        logger.info(f"Exported diff results for {hostname}")
+        return jsonify(
+            {
+                "hostname": hostname,
+                "export_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "results": results,
+            }
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error(f"Failed to export diff for {hostname}: {exc}")
+        return jsonify({"error": str(exc)}), 500
+
+
+# --- API endpoint to get logs ---
+@app.route("/api/logs")
+def get_logs():
+    """
+    Returns recent log entries for monitoring and debugging.
+    """
+    try:
+        log_file = os.path.join(LOG_DIR, "nwdiff.log")
+        if not os.path.exists(log_file):
+            return jsonify({"logs": []})
+
+        # Read last 100 lines
+        with open(log_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+            recent_logs = lines[-100:]
+
+        return jsonify({"logs": recent_logs})
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error(f"Failed to read logs: {exc}")
+        return jsonify({"error": str(exc)}), 500
+
+
+# --- View logs page ---
+@app.route("/logs")
+def view_logs():
+    """
+    Renders the logs viewing page.
+    """
+    return render_template("logs.html")
 
 
 if __name__ == "__main__":
