@@ -61,7 +61,7 @@
     document.getElementById('autoRefreshToggle').addEventListener('click', function() {
         autoRefreshEnabled = !autoRefreshEnabled;
         const btn = document.getElementById('autoRefreshToggle');
-        
+
         if (autoRefreshEnabled) {
             btn.textContent = 'Auto-Refresh: ON';
             btn.classList.remove('btn-secondary');
@@ -89,14 +89,14 @@
     window.addEventListener('load', function() {
         const logDiv = document.getElementById('logContent');
         let html = logDiv.innerHTML;
-        
+
         // Apply colors to different log levels
         html = html.replace(/- ERROR -/g, '<span style="color: #dc3545; font-weight: bold;">- ERROR -</span>');
         html = html.replace(/- CRITICAL -/g, '<span style="color: #dc3545; font-weight: bold; background-color: #f8d7da;">- CRITICAL -</span>');
         html = html.replace(/- WARNING -/g, '<span style="color: #ffc107; font-weight: bold;">- WARNING -</span>');
         html = html.replace(/- INFO -/g, '<span style="color: #17a2b8;">- INFO -</span>');
         html = html.replace(/- DEBUG -/g, '<span style="color: #6c757d;">- DEBUG -</span>');
-        
+
         logDiv.innerHTML = html;
     });
 </script>
