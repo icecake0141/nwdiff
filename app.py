@@ -503,7 +503,7 @@ def export_diff(hostname):
         return "Host not found", 404
 
     # Sanitize hostname for use in filename - remove any characters that could cause path traversal
-    safe_hostname = re.sub(r'[^\w\-]', '_', hostname)
+    safe_hostname = re.sub(r"[^\w\-]", "_", hostname)
 
     # Generate HTML content
     html_parts = [
@@ -537,29 +537,61 @@ def export_diff(hostname):
                 status, diff_html = compute_diff(origin_data, dest_data, "inline")
 
                 html_parts.append("<div class='card mb-3'>")
-                html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
+                html_parts.append(
+                    "<div class='card-header'><strong>Command:</strong> {}</div>".format(
+                        command
+                    )
+                )
                 html_parts.append("<div class='card-body'>")
-                html_parts.append("<p><strong>Origin Modified:</strong> {}</p>".format(origin_mtime))
-                html_parts.append("<p><strong>Dest Modified:</strong> {}</p>".format(dest_mtime))
+                html_parts.append(
+                    "<p><strong>Origin Modified:</strong> {}</p>".format(origin_mtime)
+                )
+                html_parts.append(
+                    "<p><strong>Dest Modified:</strong> {}</p>".format(dest_mtime)
+                )
                 if status == "changes detected":
-                    html_parts.append("<span style='background-color: #ffff99; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(status))
+                    html_parts.append(
+                        "<span style='background-color: #ffff99; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(
+                            status
+                        )
+                    )
                 elif status == "identical":
-                    html_parts.append("<span style='background-color: #add8e6; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(status))
+                    html_parts.append(
+                        "<span style='background-color: #add8e6; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(
+                            status
+                        )
+                    )
                 else:
-                    html_parts.append("<span class='badge badge-info'>{}</span>".format(status))
+                    html_parts.append(
+                        "<span class='badge badge-info'>{}</span>".format(status)
+                    )
                 html_parts.append("<div class='mt-3'>{}</div>".format(diff_html))
                 html_parts.append("</div></div>")
             except (IOError, OSError) as exc:  # pylint: disable=broad-exception-caught
                 html_parts.append("<div class='card mb-3'>")
-                html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
+                html_parts.append(
+                    "<div class='card-header'><strong>Command:</strong> {}</div>".format(
+                        command
+                    )
+                )
                 html_parts.append("<div class='card-body'>")
-                html_parts.append("<p class='text-danger'>Error reading files: {}</p>".format(str(exc)))
+                html_parts.append(
+                    "<p class='text-danger'>Error reading files: {}</p>".format(
+                        str(exc)
+                    )
+                )
                 html_parts.append("</div></div>")
         else:
             html_parts.append("<div class='card mb-3'>")
-            html_parts.append("<div class='card-header'><strong>Command:</strong> {}</div>".format(command))
+            html_parts.append(
+                "<div class='card-header'><strong>Command:</strong> {}</div>".format(
+                    command
+                )
+            )
             html_parts.append("<div class='card-body'>")
-            html_parts.append("<p class='text-danger'>Files not found for this command</p>")
+            html_parts.append(
+                "<p class='text-danger'>Files not found for this command</p>"
+            )
             html_parts.append("</div></div>")
 
     html_parts.extend(["</div>", "</body>", "</html>"])
@@ -567,7 +599,9 @@ def export_diff(hostname):
 
     response = make_response(html_content)
     response.headers["Content-Type"] = "text/html"
-    response.headers["Content-Disposition"] = "attachment; filename={}-diff-export.html".format(safe_hostname)
+    response.headers["Content-Disposition"] = (
+        "attachment; filename={}-diff-export.html".format(safe_hostname)
+    )
     return response
 
 
