@@ -499,7 +499,10 @@ def export_json(hostname):
     # Validate hostname exists in CSV
     device_info = get_device_info(hostname)
     if not device_info:
-        return jsonify({"error": "Hostname not found"}), 404
+        return (
+            jsonify({"error": "Hostname not found in hosts configuration"}),
+            404,
+        )
 
     commands = get_commands_for_host(hostname)
     export_data = {
@@ -527,11 +530,16 @@ def export_json(hostname):
 
         # Compute diff status if both files exist
         if os.path.exists(origin_path) and os.path.exists(dest_path):
-            with open(origin_path, encoding="utf-8") as f:
-                origin_data = f.read()
-            with open(dest_path, encoding="utf-8") as f:
-                dest_data = f.read()
-            command_data["diff_status"] = compute_diff_status(origin_data, dest_data)
+            try:
+                with open(origin_path, encoding="utf-8") as f:
+                    origin_data = f.read()
+                with open(dest_path, encoding="utf-8") as f:
+                    dest_data = f.read()
+                command_data["diff_status"] = compute_diff_status(
+                    origin_data, dest_data
+                )
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                command_data["diff_status"] = f"error reading files: {exc}"
         else:
             command_data["diff_status"] = "file not found"
 

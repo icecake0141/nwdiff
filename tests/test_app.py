@@ -135,7 +135,7 @@ def test_export_json_returns_404_for_missing_hostname(
 
     assert response.status_code == 404
     assert response.json is not None
-    assert response.json["error"] == "Hostname not found"
+    assert response.json["error"] == "Hostname not found in hosts configuration"
 
 
 def test_export_json_returns_valid_structure(tmp_path: Path, monkeypatch) -> None:
