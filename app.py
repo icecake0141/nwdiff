@@ -27,6 +27,7 @@ app = Flask(__name__)
 ORIGIN_DIR = "origin"
 DEST_DIR = "dest"  # Changed from "dear" to "dest"
 DIFF_DIR = "diff"  # Directory to store diff HTML files
+BACKUP_DIR = "backup"  # Directory to store backup files
 HOSTS_CSV = "hosts.csv"
 
 # Device model specific command lists
@@ -54,6 +55,59 @@ DEFAULT_COMMANDS = ("show version",)
 os.makedirs(ORIGIN_DIR, exist_ok=True)
 os.makedirs(DEST_DIR, exist_ok=True)
 os.makedirs(DIFF_DIR, exist_ok=True)
+os.makedirs(BACKUP_DIR, exist_ok=True)
+
+
+# --- Backup helper functions ---
+def get_backup_filename(filepath):
+    """
+    Generates a backup filename with timestamp in format: YYYYMMDD_HHMMSS_hostname-command.txt
+    """
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = os.path.basename(filepath)
+    return os.path.join(BACKUP_DIR, f"{timestamp}_{filename}")
+
+
+def rotate_backups(filepath):
+    """
+    Keeps only the last 10 backups for a given file.
+    Deletes older backups beyond the 10 most recent.
+    """
+    filename = os.path.basename(filepath)
+    # Find all backups for this file
+    backup_files = []
+    for backup_file in os.listdir(BACKUP_DIR):
+        if backup_file.endswith(f"_{filename}"):
+            backup_path = os.path.join(BACKUP_DIR, backup_file)
+            backup_files.append((backup_path, os.path.getmtime(backup_path)))
+
+    # Sort by modification time (newest first)
+    backup_files.sort(key=lambda x: x[1], reverse=True)
+
+    # Keep only the 10 most recent, delete the rest
+    for backup_path, _ in backup_files[10:]:
+        try:
+            os.remove(backup_path)
+        except OSError:
+            pass
+
+
+def create_backup(filepath):
+    """
+    Creates a backup of the file before it is overwritten.
+    Only creates backup if the file exists.
+    After backup creation, rotates backups to keep only the last 10.
+    """
+    if os.path.exists(filepath):
+        backup_path = get_backup_filename(filepath)
+        try:
+            with open(filepath, "r", encoding="utf-8") as src:
+                content = src.read()
+            with open(backup_path, "w", encoding="utf-8") as dst:
+                dst.write(content)
+            rotate_backups(filepath)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            print(f"Warning: Failed to create backup for {filepath}: {exc}")
 
 
 # --- Helper function to read CSV and skip comment lines ---
@@ -293,6 +347,7 @@ def capture(base, hostname):
         for command in commands:
             output = connection.send_command(command)
             filepath = get_file_path(hostname, command, base)
+            create_backup(filepath)
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(output)
 
@@ -335,6 +390,7 @@ def capture_all(base):
             for command in commands:
                 output = connection.send_command(command)
                 filepath = get_file_path(hostname, command, base)
+                create_backup(filepath)
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(output)
 
