@@ -1431,3 +1431,93 @@ def test_capture_all_endpoint_get_with_auth_token_still_405(
 
     # Should be 405 regardless of valid token
     assert response.status_code == 405
+
+
+# --- Tests for HOSTS_CSV environment variable configuration ---
+
+
+def test_hosts_csv_uses_env_var_when_set(tmp_path: Path, monkeypatch) -> None:
+    """Test that HOSTS_CSV environment variable overrides default path."""
+    # Create a CSV file in a custom location
+    custom_csv = tmp_path / "custom_hosts.csv"
+    custom_csv.write_text(
+        "host,ip,username,port,model\nrouter1,192.168.1.1,admin,22,cisco\n",
+        encoding="utf-8",
+    )
+
+    # Set the environment variable to point to the custom CSV
+    monkeypatch.setenv("HOSTS_CSV", str(custom_csv))
+
+    # Reload the devices module to pick up the new environment variable
+    importlib.reload(devices)
+
+    # Verify that the custom CSV is being used
+    rows = devices.read_hosts_csv()
+    assert len(rows) == 1
+    assert rows[0]["host"] == "router1"
+    assert rows[0]["ip"] == "192.168.1.1"
+
+
+def test_hosts_csv_uses_default_when_env_var_not_set(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Test that default hosts.csv is used when HOSTS_CSV env var is not set."""
+    # Create a hosts.csv file in the current directory
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        "host,ip,username,port,model\nrouter2,10.0.0.2,admin,22,fortinet\n",
+        encoding="utf-8",
+    )
+
+    # Remove the environment variable if it exists
+    monkeypatch.delenv("HOSTS_CSV", raising=False)
+
+    # Change to the temporary directory so hosts.csv is found
+    monkeypatch.chdir(tmp_path)
+
+    # Reload the devices module to pick up the new environment variable
+    importlib.reload(devices)
+
+    # Verify that the default hosts.csv is being used
+    rows = devices.read_hosts_csv()
+    assert len(rows) == 1
+    assert rows[0]["host"] == "router2"
+    assert rows[0]["ip"] == "10.0.0.2"
+
+
+def test_hosts_csv_logs_path_on_read(tmp_path: Path, monkeypatch, caplog) -> None:
+    """Test that the CSV path is logged when read_hosts_csv is called."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        "host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
+
+    with caplog.at_level(logging.INFO):
+        devices.read_hosts_csv()
+
+    # Verify that the path was logged
+    assert any(
+        "Reading hosts CSV from:" in record.message and str(hosts_csv) in record.message
+        for record in caplog.records
+    )
+
+
+def test_hosts_csv_error_message_shows_configured_path(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    """Test that error messages show the configured CSV path."""
+    non_existent = tmp_path / "nonexistent.csv"
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(non_existent))
+
+    with caplog.at_level(logging.ERROR):
+        rows = devices.read_hosts_csv()
+
+    assert not rows
+    # Verify that the error message includes the configured path
+    assert any(
+        "Hosts CSV file not found:" in record.message
+        and str(non_existent) in record.message
+        for record in caplog.records
+    )

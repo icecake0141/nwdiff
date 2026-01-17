@@ -14,8 +14,9 @@ Review required for correctness, security, and licensing.
 
 import csv
 import logging
+import os
 
-HOSTS_CSV = "hosts.csv"
+HOSTS_CSV = os.environ.get("HOSTS_CSV", "hosts.csv")
 
 logger = logging.getLogger("nw-diff")
 
@@ -47,6 +48,7 @@ def read_hosts_csv():
     Returns a list of dictionaries (CSV rows).
     """
     try:
+        logger.info("Reading hosts CSV from: %s", HOSTS_CSV)
         with open(HOSTS_CSV, newline="", encoding="utf-8") as csvfile:
             filtered = (line for line in csvfile if not line.lstrip().startswith("#"))
             reader = csv.DictReader(filtered)

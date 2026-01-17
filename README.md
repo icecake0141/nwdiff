@@ -67,6 +67,19 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
 
      **Important:** If `NW_DIFF_API_TOKEN` is not set, sensitive endpoints will be accessible without authentication (not recommended for production).
 
+   - **(Optional) Set the `HOSTS_CSV` environment variable** to specify a custom location for the hosts inventory file:
+     ```bash
+     export HOSTS_CSV=/path/to/hosts.csv
+     ```
+     If not set, the application will use the default `hosts.csv` in the current directory.
+
+     **Benefits:** Storing the hosts inventory outside the repository improves security by preventing accidental commits of sensitive data (IP addresses, usernames, device models). This is particularly useful for production deployments where the inventory can be mounted as a secret or configuration volume.
+
+     **Container example:**
+     ```bash
+     docker run -v /secure/path/hosts.csv:/app/hosts.csv -e HOSTS_CSV=/app/hosts.csv ...
+     ```
+
 ## Usage
 
 ### Running in Production Mode (Default)
