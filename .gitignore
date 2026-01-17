@@ -2,6 +2,7 @@ hosts.csv
 dest/
 origin/
 diff/
+logs/*.log
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
