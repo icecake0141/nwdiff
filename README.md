@@ -41,7 +41,7 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
    ```
 2. **Navigate to the project directory:**
    ```bash
-   cd /workspaces/nw-diff
+   cd nw-diff
    ```
 
 3. **Install dependencies:**

@@ -208,6 +208,8 @@ def capture_all(base):
 def host_list():
     """
     Displays the main host list page showing all devices and their status.
+    Retrieves all hosts from CSV, computes diff status for each command pair,
+    and displays modification times for origin and dest files.
     """
     logger.debug("Host list page requested")
     hosts = []
@@ -254,6 +256,7 @@ def host_detail(hostname):
     """
     Displays detailed diff view for a specific host.
     Validates hostname to prevent path traversal attacks.
+    View parameter accepts 'inline' or 'sidebyside' (default: 'inline').
     """
     logger.info("Host detail page requested for: %s", hostname)
 
@@ -340,7 +343,8 @@ def host_detail(hostname):
 def compare_files():
     """
     Renders a form to select two hosts, directory (origin/dest), and command.
-    When submitted, reads corresponding files for both hosts and computes diff.
+    When submitted, compares command output between two hosts for the same
+    base directory (origin/dest), reads corresponding files and computes diff.
     Validates all inputs to prevent path traversal attacks.
     """
     hosts = list({row["host"] for row in read_hosts_csv()})
@@ -622,8 +626,8 @@ def export_json(hostname):
 def logs_view():
     """
     Web UI for viewing logs.
-    Displays the most recent log entries with real-time updates.
-    Supports limit parameter to control the number of lines displayed.
+    Displays the most recent log entries (supports limit parameter to control
+    the number of lines displayed, default: 1000, max: 10000).
     """
     logger.debug("Logs view page requested")
 
