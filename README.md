@@ -156,9 +156,9 @@ The computed diff HTML files are stored in the `diff` directory for offline view
 
 3. **Format, lint, type check, and test:**
    ```bash
-   black tests
-   pylint tests
-   mypy tests
+   black app.py tests nw_diff
+   pylint app.py tests nw_diff
+   mypy app.py nw_diff tests
    pytest
    ```
 
