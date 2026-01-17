@@ -568,7 +568,7 @@ def generate_side_by_side_html(origin_data, dest_data):
 
 
 # --- Capture endpoint for individual host ---
-@app.route("/capture/<base>/<hostname>")
+@app.route("/capture/<base>/<hostname>", methods=["POST"])
 @require_api_token
 def capture(base, hostname):
     """
@@ -636,7 +636,7 @@ def capture(base, hostname):
 
 
 # --- New endpoint: Capture for all devices ---
-@app.route("/capture_all/<base>")
+@app.route("/capture_all/<base>", methods=["POST"])
 @require_api_token
 def capture_all(base):
     """

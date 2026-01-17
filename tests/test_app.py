@@ -678,7 +678,7 @@ def test_capture_endpoint_rejects_invalid_hostname(tmp_path: Path, monkeypatch) 
 
     with app.app.test_client() as client:
         # Test with hostname containing semicolon (invalid character)
-        response = client.get("/capture/origin/test;rm")
+        response = client.post("/capture/origin/test;rm")
         assert response.status_code == 400
         assert b"Invalid hostname" in response.data
 
@@ -694,7 +694,7 @@ def test_capture_endpoint_rejects_invalid_base(tmp_path: Path, monkeypatch) -> N
 
     with app.app.test_client() as client:
         # Test with invalid base directory name
-        response = client.get("/capture/backup/router1")
+        response = client.post("/capture/backup/router1")
         assert response.status_code == 400
         assert b"Invalid capture type" in response.data
 
@@ -933,7 +933,7 @@ def test_capture_endpoint_requires_auth_missing_token(
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
-        response = client.get("/capture/origin/router1")
+        response = client.post("/capture/origin/router1")
 
     assert response.status_code == 401
     assert response.json is not None
@@ -953,7 +953,7 @@ def test_capture_endpoint_requires_auth_invalid_token(
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
-        response = client.get(
+        response = client.post(
             "/capture/origin/router1",
             headers={"Authorization": "Bearer wrong_token"},
         )
@@ -974,7 +974,7 @@ def test_capture_endpoint_accepts_valid_token(tmp_path: Path, monkeypatch) -> No
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
-        response = client.get(
+        response = client.post(
             "/capture/origin/router1",
             headers={"Authorization": "Bearer test_secret_token"},
         )
@@ -988,7 +988,7 @@ def test_capture_all_endpoint_requires_auth_missing_token(monkeypatch) -> None:
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
-        response = client.get("/capture_all/origin")
+        response = client.post("/capture_all/origin")
 
     assert response.status_code == 401
     assert response.json is not None
@@ -1006,7 +1006,7 @@ def test_capture_all_endpoint_accepts_valid_token(tmp_path: Path, monkeypatch) -
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
-        response = client.get(
+        response = client.post(
             "/capture_all/origin",
             headers={"Authorization": "Bearer test_secret_token"},
         )
@@ -1231,3 +1231,157 @@ def test_auth_does_not_leak_internal_details(monkeypatch) -> None:
     # Should not contain details about the expected token
     assert "test_secret_token" not in str(json_data)
     assert "NW_DIFF_API_TOKEN" not in str(json_data)
+
+
+# --- Tests for POST-only capture endpoints ---
+
+
+def test_capture_endpoint_get_returns_405(tmp_path: Path, monkeypatch) -> None:
+    """Test that GET request to /capture endpoint returns 405 Method Not Allowed."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
+
+    with app.app.test_client() as client:
+        response = client.get("/capture/origin/router1")
+
+    assert response.status_code == 405
+
+
+def test_capture_endpoint_post_works(tmp_path: Path, monkeypatch) -> None:
+    """Test that POST request to /capture endpoint works (even if device is not reachable)."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
+
+    with app.app.test_client() as client:
+        response = client.post("/capture/origin/router1")
+
+    # Should not be 405 (will be 404, 500, or redirect due to missing device connection)
+    assert response.status_code != 405
+
+
+def test_capture_all_endpoint_get_returns_405(tmp_path: Path, monkeypatch) -> None:
+    """Test that GET request to /capture_all endpoint returns 405 Method Not Allowed."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
+
+    with app.app.test_client() as client:
+        response = client.get("/capture_all/origin")
+
+    assert response.status_code == 405
+
+
+def test_capture_all_endpoint_post_works(tmp_path: Path, monkeypatch) -> None:
+    """Test that POST request to /capture_all endpoint works (even if devices are not reachable)."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
+
+    with app.app.test_client() as client:
+        response = client.post("/capture_all/origin")
+
+    # Should not be 405 (will be redirect or error due to missing device connection)
+    assert response.status_code != 405
+
+
+def test_capture_endpoint_post_with_auth_token(tmp_path: Path, monkeypatch) -> None:
+    """Test that POST request to /capture endpoint works with valid auth token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.post(
+            "/capture/origin/router1",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    # Should not be 401 or 405 (will be 404 or 500 due to missing device connection)
+    assert response.status_code not in [401, 405]
+
+
+def test_capture_endpoint_get_with_auth_token_still_405(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Test that GET request to /capture endpoint returns 405 even with valid auth token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/capture/origin/router1",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    # Should be 405 regardless of valid token
+    assert response.status_code == 405
+
+
+def test_capture_all_endpoint_post_with_auth_token(tmp_path: Path, monkeypatch) -> None:
+    """Test that POST request to /capture_all endpoint works with valid auth token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.post(
+            "/capture_all/origin",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    # Should not be 401 or 405 (will be redirect or error due to missing device connection)
+    assert response.status_code not in [401, 405]
+
+
+def test_capture_all_endpoint_get_with_auth_token_still_405(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Test that GET request to /capture_all endpoint returns 405 even with valid auth token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/capture_all/origin",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    # Should be 405 regardless of valid token
+    assert response.status_code == 405
+
