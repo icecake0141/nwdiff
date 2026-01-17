@@ -138,7 +138,6 @@ The computed diff HTML files are stored in the `diff` directory for offline view
 
 2. **Run security audit:**
    ```bash
-   pip install pip-audit
    pip-audit -r requirements.txt -r requirements-dev.txt
    ```
 
