@@ -462,3 +462,288 @@ def test_debug_mode_enabled_with_env_var(monkeypatch) -> None:
     monkeypatch.setenv("APP_DEBUG", "false")
     debug_mode = os.environ.get("APP_DEBUG", "false").lower() in {"true", "1", "yes"}
     assert debug_mode is False
+
+
+# --- Security tests for path traversal protection ---
+
+
+def test_validate_hostname_rejects_parent_directory() -> None:
+    """Test that hostname validation rejects parent directory references."""
+    assert app.validate_hostname("..") is False
+    assert app.validate_hostname("../etc") is False
+    assert app.validate_hostname("test/../etc") is False
+
+
+def test_validate_hostname_rejects_path_separators() -> None:
+    """Test that hostname validation rejects path separators."""
+    assert app.validate_hostname("/etc/passwd") is False
+    assert app.validate_hostname("test/file") is False
+    assert app.validate_hostname("test\\file") is False
+    assert app.validate_hostname("\\windows\\system32") is False
+
+
+def test_validate_hostname_rejects_invalid_characters() -> None:
+    """Test that hostname validation rejects special characters."""
+    assert app.validate_hostname("test;rm -rf") is False
+    assert app.validate_hostname("test|cat") is False
+    assert app.validate_hostname("test&ls") is False
+    assert app.validate_hostname("test$var") is False
+    assert app.validate_hostname("test`whoami`") is False
+
+
+def test_validate_hostname_accepts_valid_names() -> None:
+    """Test that hostname validation accepts valid hostnames."""
+    assert app.validate_hostname("router1") is True
+    assert app.validate_hostname("switch-01") is True
+    assert app.validate_hostname("fw_main") is True
+    assert app.validate_hostname("host.example.com") is True
+    assert app.validate_hostname("router-123_backup") is True
+
+
+def test_validate_hostname_rejects_empty() -> None:
+    """Test that hostname validation rejects empty strings."""
+    assert app.validate_hostname("") is False
+    assert app.validate_hostname(None) is False
+
+
+def test_validate_command_rejects_parent_directory() -> None:
+    """Test that command validation rejects parent directory references."""
+    assert app.validate_command("..") is False
+    assert app.validate_command("../etc/passwd") is False
+    assert app.validate_command("show ../../../etc/passwd") is False
+
+
+def test_validate_command_rejects_path_separators() -> None:
+    """Test that command validation rejects path separators."""
+    assert app.validate_command("/etc/passwd") is False
+    assert app.validate_command("show /etc/passwd") is False
+    assert app.validate_command("show\\file") is False
+
+
+def test_validate_command_rejects_invalid_characters() -> None:
+    """Test that command validation rejects special characters."""
+    assert app.validate_command("show version; rm -rf") is False
+    assert app.validate_command("show|cat") is False
+    assert app.validate_command("show&ls") is False
+
+
+def test_validate_command_accepts_valid_commands() -> None:
+    """Test that command validation accepts valid commands."""
+    assert app.validate_command("show version") is True
+    assert app.validate_command("show running-config") is True
+    assert app.validate_command("get system status") is True
+    assert app.validate_command("diag_switch_ports") is True
+
+
+def test_validate_command_rejects_empty() -> None:
+    """Test that command validation rejects empty strings."""
+    assert app.validate_command("") is False
+    assert app.validate_command(None) is False
+
+
+def test_validate_base_directory_accepts_valid() -> None:
+    """Test that base directory validation accepts only origin and dest."""
+    assert app.validate_base_directory("origin") is True
+    assert app.validate_base_directory("dest") is True
+
+
+def test_validate_base_directory_rejects_invalid() -> None:
+    """Test that base directory validation rejects other values."""
+    assert app.validate_base_directory("backup") is False
+    assert app.validate_base_directory("../origin") is False
+    assert app.validate_base_directory("/tmp") is False
+    assert app.validate_base_directory("") is False
+
+
+def test_get_file_path_rejects_traversal_in_hostname() -> None:
+    """Test that get_file_path rejects path traversal in hostname."""
+    with pytest.raises(ValueError, match="Invalid hostname"):
+        app.get_file_path("../etc", "show version", "origin")
+    with pytest.raises(ValueError, match="Invalid hostname"):
+        app.get_file_path("../../etc/passwd", "show version", "origin")
+
+
+def test_get_file_path_rejects_traversal_in_command() -> None:
+    """Test that get_file_path rejects path traversal in command."""
+    with pytest.raises(ValueError, match="Invalid command"):
+        app.get_file_path("router1", "../etc/passwd", "origin")
+    with pytest.raises(ValueError, match="Invalid command"):
+        app.get_file_path("router1", "show ../../etc/passwd", "origin")
+
+
+def test_get_file_path_rejects_invalid_base() -> None:
+    """Test that get_file_path rejects invalid base directory."""
+    with pytest.raises(ValueError, match="Invalid base"):
+        app.get_file_path("router1", "show version", "backup")
+    with pytest.raises(ValueError, match="Invalid base"):
+        app.get_file_path("router1", "show version", "../origin")
+
+
+def test_get_file_path_returns_normalized_path() -> None:
+    """Test that get_file_path returns properly normalized paths."""
+    path = app.get_file_path("router1", "show version", "origin")
+    assert ".." not in path
+    assert path.startswith("origin")
+    assert "router1-show_version.txt" in path
+
+
+def test_get_diff_file_path_rejects_traversal() -> None:
+    """Test that get_diff_file_path rejects path traversal attempts."""
+    with pytest.raises(ValueError, match="Invalid hostname"):
+        app.get_diff_file_path("../etc", "show version")
+    with pytest.raises(ValueError, match="Invalid command"):
+        app.get_diff_file_path("router1", "../etc/passwd")
+
+
+def test_compare_files_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> None:
+    """Test that /compare_files endpoint rejects invalid hostnames."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        response = client.post(
+            "/compare_files",
+            data={
+                "host1": "../etc",
+                "host2": "router1",
+                "base": "origin",
+                "command": "show version",
+                "view": "inline",
+            },
+        )
+        assert response.status_code == 200
+        assert b"Invalid hostname" in response.data
+
+
+def test_compare_files_rejects_invalid_command(tmp_path: Path, monkeypatch) -> None:
+    """Test that /compare_files endpoint rejects invalid commands."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        response = client.post(
+            "/compare_files",
+            data={
+                "host1": "router1",
+                "host2": "router1",
+                "base": "origin",
+                "command": "../etc/passwd",
+                "view": "inline",
+            },
+        )
+        assert response.status_code == 200
+        assert b"Invalid command" in response.data
+
+
+def test_compare_files_rejects_invalid_base(tmp_path: Path, monkeypatch) -> None:
+    """Test that /compare_files endpoint rejects invalid base directory."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        response = client.post(
+            "/compare_files",
+            data={
+                "host1": "router1",
+                "host2": "router1",
+                "base": "../backup",
+                "command": "show version",
+                "view": "inline",
+            },
+        )
+        assert response.status_code == 200
+        assert b"Invalid base" in response.data
+
+
+def test_capture_endpoint_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> None:
+    """Test that /capture endpoint rejects invalid hostnames."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        # Test with hostname containing semicolon (invalid character)
+        response = client.get("/capture/origin/test;rm")
+        assert response.status_code == 400
+        assert b"Invalid hostname" in response.data
+
+
+def test_capture_endpoint_rejects_invalid_base(tmp_path: Path, monkeypatch) -> None:
+    """Test that /capture endpoint rejects invalid base directory."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        # Test with invalid base directory name
+        response = client.get("/capture/backup/router1")
+        assert response.status_code == 400
+        assert b"Invalid capture type" in response.data
+
+
+def test_host_detail_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> None:
+    """Test that /host/<hostname> endpoint rejects invalid hostnames."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        # Test with hostname containing invalid character
+        response = client.get("/host/test;command")
+        assert response.status_code == 400
+        assert b"Invalid hostname" in response.data
+
+
+def test_export_diff_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> None:
+    """Test that /export/<hostname> endpoint rejects invalid hostnames."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        # Test with hostname containing invalid character
+        response = client.get("/export/test$var")
+        assert response.status_code == 400
+        assert b"Invalid hostname" in response.data
+
+
+def test_export_json_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> None:
+    """Test that /api/export/<hostname> endpoint rejects invalid hostnames."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        # Test with hostname containing invalid character
+        response = client.get("/api/export/test|cat")
+        assert response.status_code == 400
+        json_data = response.get_json()
+        assert json_data is not None
+        assert "Invalid hostname" in json_data["error"]

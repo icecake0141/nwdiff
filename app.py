@@ -102,6 +102,70 @@ os.makedirs(DIFF_DIR, exist_ok=True)
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 
+# --- Security validation functions ---
+def validate_hostname(hostname):
+    """
+    Validates hostname to prevent path traversal attacks.
+    Only allows alphanumeric characters, hyphens, underscores, and dots.
+    Blocks path separators, parent directory references, and absolute paths.
+
+    Args:
+        hostname: The hostname string to validate
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if not hostname:
+        return False
+    # Block common path traversal patterns
+    if ".." in hostname or "/" in hostname or "\\" in hostname:
+        logger.warning("Rejected hostname with traversal pattern: %s", hostname)
+        return False
+    # Only allow safe characters: alphanumeric, hyphen, underscore, dot
+    if not re.match(r"^[a-zA-Z0-9._-]+$", hostname):
+        logger.warning("Rejected hostname with invalid characters: %s", hostname)
+        return False
+    return True
+
+
+def validate_command(command):
+    """
+    Validates command string to prevent path traversal attacks.
+    Only allows alphanumeric characters, spaces, hyphens, underscores.
+    Blocks path separators and parent directory references.
+
+    Args:
+        command: The command string to validate
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if not command:
+        return False
+    # Block common path traversal patterns
+    if ".." in command or "/" in command or "\\" in command:
+        logger.warning("Rejected command with traversal pattern: %s", command)
+        return False
+    # Only allow safe characters: alphanumeric, space, hyphen, underscore
+    if not re.match(r"^[a-zA-Z0-9 _-]+$", command):
+        logger.warning("Rejected command with invalid characters: %s", command)
+        return False
+    return True
+
+
+def validate_base_directory(base):
+    """
+    Validates that base is one of the allowed directory names.
+
+    Args:
+        base: The base directory name
+
+    Returns:
+        True if valid, False otherwise
+    """
+    return base in ["origin", "dest"]
+
+
 # --- Backup helper functions ---
 def get_backup_filename(filepath):
     """
@@ -227,23 +291,73 @@ def get_file_path(host, command, base):
     base: "origin" or "dest"
     Constructs the filename using the host and command
     (spaces replaced with underscores).
+    Validates inputs to prevent path traversal attacks.
     """
+    # Validate inputs
+    if not validate_hostname(host):
+        raise ValueError(f"Invalid hostname: {host}")
+    if not validate_command(command):
+        raise ValueError(f"Invalid command: {command}")
+    if not validate_base_directory(base):
+        raise ValueError(f"Invalid base directory: {base}")
+
+    # Construct filename
     safe_command = command.replace(" ", "_")
     filename = f"{host}-{safe_command}.txt"
+
+    # Get base directory path
     if base == "origin":
-        return os.path.join(ORIGIN_DIR, filename)
-    if base == "dest":
-        return os.path.join(DEST_DIR, filename)
-    raise ValueError("Invalid base")
+        base_dir = ORIGIN_DIR
+    else:  # base == "dest" (already validated)
+        base_dir = DEST_DIR
+
+    # Construct full path and normalize it
+    full_path = os.path.join(base_dir, filename)
+    normalized_path = os.path.normpath(full_path)
+
+    # Verify the normalized path is still within the intended base directory
+    base_abs = os.path.abspath(base_dir)
+    path_abs = os.path.abspath(normalized_path)
+
+    if not path_abs.startswith(base_abs + os.sep) and path_abs != base_abs:
+        logger.error(
+            "Path traversal attempt detected: %s escapes %s", path_abs, base_abs
+        )
+        raise ValueError("Path traversal detected")
+
+    return normalized_path
 
 
 def get_diff_file_path(host, command):
     """
     Constructs the path for the diff file.
+    Validates inputs to prevent path traversal attacks.
     """
+    # Validate inputs
+    if not validate_hostname(host):
+        raise ValueError(f"Invalid hostname: {host}")
+    if not validate_command(command):
+        raise ValueError(f"Invalid command: {command}")
+
+    # Construct filename
     safe_command = command.replace(" ", "_")
     filename = f"{host}-{safe_command}-diff.html"
-    return os.path.join(DIFF_DIR, filename)
+
+    # Construct full path and normalize it
+    full_path = os.path.join(DIFF_DIR, filename)
+    normalized_path = os.path.normpath(full_path)
+
+    # Verify the normalized path is still within the diff directory
+    diff_abs = os.path.abspath(DIFF_DIR)
+    path_abs = os.path.abspath(normalized_path)
+
+    if not path_abs.startswith(diff_abs + os.sep) and path_abs != diff_abs:
+        logger.error(
+            "Path traversal attempt detected: %s escapes %s", path_abs, diff_abs
+        )
+        raise ValueError("Path traversal detected")
+
+    return normalized_path
 
 
 # --- Helper function to compute diff status only ---
@@ -402,18 +516,23 @@ def capture(base, hostname):
     Establishes a single connection to the target device and retrieves
     output for each command (based on the device's model) before
     disconnecting. CSV reading ignores comment lines.
+    Validates inputs to prevent path traversal attacks.
     """
     logger.info("Capture request received for host=%s, base=%s", hostname, base)
 
-    if base not in ["origin", "dest"]:
+    if not validate_base_directory(base):
         logger.error("Invalid capture type requested: %s", base)
         return "Invalid capture type", 400
+
+    if not validate_hostname(hostname):
+        logger.error("Invalid hostname for capture: %s", hostname)
+        return "Invalid hostname", 400
 
     commands = get_commands_for_host(hostname)
     device_info = get_device_info(hostname)
     if not device_info:
         logger.error("Could not find device info in CSV for host: %s", hostname)
-        return "Could not find device info in CSV for host: " + hostname
+        return f"Could not find device info in CSV for host: {hostname}", 404
 
     device = {
         "device_type": device_info["model"],
@@ -462,10 +581,11 @@ def capture_all(base):
     Captures data for all devices registered in hosts.csv.
     Establishes a connection for each device and retrieves the output for each command.
     CSV reading ignores comment lines.
+    Validates inputs to prevent path traversal attacks.
     """
     logger.info("Capture all request received for base=%s", base)
 
-    if base not in ["origin", "dest"]:
+    if not validate_base_directory(base):
         logger.error("Invalid capture type requested: %s", base)
         return "Invalid capture type", 400
 
@@ -587,8 +707,14 @@ def host_list():
 def host_detail(hostname):
     """
     Displays detailed diff view for a specific host.
+    Validates hostname to prevent path traversal attacks.
     """
     logger.info("Host detail page requested for: %s", hostname)
+
+    if not validate_hostname(hostname):
+        logger.error("Invalid hostname for host detail: %s", hostname)
+        return "Invalid hostname", 400
+
     view = request.args.get("view", "inline")
     command_results = []
     commands = get_commands_for_host(hostname)
@@ -669,6 +795,7 @@ def compare_files():
     """
     Renders a form to select two hosts, directory (origin/dest), and command.
     When submitted, reads corresponding files for both hosts and computes diff.
+    Validates all inputs to prevent path traversal attacks.
     """
     hosts = list({row["host"] for row in read_hosts_csv()})
     error = None
@@ -685,31 +812,48 @@ def compare_files():
         if not host1 or not host2 or not base or not command:
             error = "All fields are required."
             logger.warning("File comparison failed: missing required fields")
+        # Validate inputs before processing
+        elif not validate_hostname(host1):
+            error = f"Invalid hostname: {host1}"
+            logger.warning("File comparison failed: invalid host1: %s", host1)
+        elif not validate_hostname(host2):
+            error = f"Invalid hostname: {host2}"
+            logger.warning("File comparison failed: invalid host2: %s", host2)
+        elif not validate_base_directory(base):
+            error = f"Invalid base directory: {base}"
+            logger.warning("File comparison failed: invalid base: %s", base)
+        elif not validate_command(command):
+            error = f"Invalid command: {command}"
+            logger.warning("File comparison failed: invalid command: %s", command)
         else:
-            path1 = get_file_path(host1, command, base)
-            path2 = get_file_path(host2, command, base)
-            if not os.path.exists(path1):
-                error = f"File for {host1} not found: {path1}"
-                logger.error("File not found for comparison: %s", path1)
-            elif not os.path.exists(path2):
-                error = f"File for {host2} not found: {path2}"
-                logger.error("File not found for comparison: %s", path2)
-            else:
-                with open(path1, encoding="utf-8") as f:
-                    data1 = f.read()
-                with open(path2, encoding="utf-8") as f:
-                    data2 = f.read()
-                if view == "sidebyside":
-                    diff_html = generate_side_by_side_html(data1, data2)
-                    status = compute_diff_status(data1, data2)
+            try:
+                path1 = get_file_path(host1, command, base)
+                path2 = get_file_path(host2, command, base)
+                if not os.path.exists(path1):
+                    error = f"File for {host1} not found"
+                    logger.error("File not found for comparison: %s", path1)
+                elif not os.path.exists(path2):
+                    error = f"File for {host2} not found"
+                    logger.error("File not found for comparison: %s", path2)
                 else:
-                    status, diff_html = compute_diff(data1, data2, view)
-                logger.info(
-                    "File comparison completed: %s vs %s, status: %s",
-                    host1,
-                    host2,
-                    status,
-                )
+                    with open(path1, encoding="utf-8") as f:
+                        data1 = f.read()
+                    with open(path2, encoding="utf-8") as f:
+                        data2 = f.read()
+                    if view == "sidebyside":
+                        diff_html = generate_side_by_side_html(data1, data2)
+                        status = compute_diff_status(data1, data2)
+                    else:
+                        status, diff_html = compute_diff(data1, data2, view)
+                    logger.info(
+                        "File comparison completed: %s vs %s, status: %s",
+                        host1,
+                        host2,
+                        status,
+                    )
+            except ValueError as exc:
+                error = f"Security validation failed: {exc}"
+                logger.error("File comparison failed: %s", exc)
     return render_template(
         "compare_files.html",
         hosts=hosts,
@@ -725,7 +869,12 @@ def export_diff(hostname):
     """
     Generates and returns a downloadable HTML file containing all diff results
     for the specified hostname.
+    Validates hostname to prevent path traversal attacks.
     """
+    if not validate_hostname(hostname):
+        logger.error("Invalid hostname for export: %s", hostname)
+        return "Invalid hostname", 400
+
     commands = get_commands_for_host(hostname)
     device_info = get_device_info(hostname)
     if not device_info:
@@ -842,6 +991,11 @@ def export_json(hostname):
     JSON export endpoint that returns all command results, timestamps, and diff status
     for the specified hostname. Validates hostname to prevent security issues.
     """
+    # Validate hostname format
+    if not validate_hostname(hostname):
+        logger.error("Invalid hostname for JSON export: %s", hostname)
+        return jsonify({"error": "Invalid hostname"}), 400
+
     # Validate hostname exists in CSV
     device_info = get_device_info(hostname)
     if not device_info:
