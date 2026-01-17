@@ -626,14 +626,14 @@ def logs_view():
     Supports limit parameter to control the number of lines displayed.
     """
     logger.debug("Logs view page requested")
-    
+
     # Get limit from query parameter, default to 1000
     try:
         limit = int(request.args.get("limit", "1000"))
         limit = min(limit, 10000)  # Max 10000 lines
     except ValueError:
         limit = 1000
-    
+
     # Import LOGS_DIR at runtime to allow test mocking
     from nw_diff.logging_config import (  # pylint: disable=import-outside-toplevel
         LOGS_DIR as current_logs_dir,
