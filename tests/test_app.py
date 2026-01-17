@@ -1253,7 +1253,7 @@ def test_capture_endpoint_get_returns_405(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_capture_endpoint_post_works(tmp_path: Path, monkeypatch) -> None:
-    """Test that POST request to /capture endpoint works (even if device is not reachable)."""
+    """Test POST request to /capture works (even if device is not reachable)."""
     hosts_csv = tmp_path / "hosts.csv"
     hosts_csv.write_text(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
@@ -1265,12 +1265,12 @@ def test_capture_endpoint_post_works(tmp_path: Path, monkeypatch) -> None:
     with app.app.test_client() as client:
         response = client.post("/capture/origin/router1")
 
-    # Should not be 405 (will be 404, 500, or redirect due to missing device connection)
+    # Should not be 405 (will be 404, 500, or redirect due to missing device)
     assert response.status_code != 405
 
 
 def test_capture_all_endpoint_get_returns_405(tmp_path: Path, monkeypatch) -> None:
-    """Test that GET request to /capture_all endpoint returns 405 Method Not Allowed."""
+    """Test GET request to /capture_all returns 405 Method Not Allowed."""
     hosts_csv = tmp_path / "hosts.csv"
     hosts_csv.write_text(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
@@ -1286,7 +1286,7 @@ def test_capture_all_endpoint_get_returns_405(tmp_path: Path, monkeypatch) -> No
 
 
 def test_capture_all_endpoint_post_works(tmp_path: Path, monkeypatch) -> None:
-    """Test that POST request to /capture_all endpoint works (even if devices are not reachable)."""
+    """Test POST request to /capture_all works (even if devices not reachable)."""
     hosts_csv = tmp_path / "hosts.csv"
     hosts_csv.write_text(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
@@ -1298,7 +1298,7 @@ def test_capture_all_endpoint_post_works(tmp_path: Path, monkeypatch) -> None:
     with app.app.test_client() as client:
         response = client.post("/capture_all/origin")
 
-    # Should not be 405 (will be redirect or error due to missing device connection)
+    # Should not be 405 (will be redirect or error due to missing device)
     assert response.status_code != 405
 
 
@@ -1325,7 +1325,7 @@ def test_capture_endpoint_post_with_auth_token(tmp_path: Path, monkeypatch) -> N
 def test_capture_endpoint_get_with_auth_token_still_405(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """Test that GET request to /capture endpoint returns 405 even with valid auth token."""
+    """Test GET request to /capture returns 405 even with valid auth token."""
     hosts_csv = tmp_path / "hosts.csv"
     hosts_csv.write_text(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
@@ -1345,7 +1345,7 @@ def test_capture_endpoint_get_with_auth_token_still_405(
 
 
 def test_capture_all_endpoint_post_with_auth_token(tmp_path: Path, monkeypatch) -> None:
-    """Test that POST request to /capture_all endpoint works with valid auth token."""
+    """Test POST request to /capture_all works with valid auth token."""
     hosts_csv = tmp_path / "hosts.csv"
     hosts_csv.write_text(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
@@ -1360,14 +1360,14 @@ def test_capture_all_endpoint_post_with_auth_token(tmp_path: Path, monkeypatch) 
             headers={"Authorization": "Bearer test_secret_token"},
         )
 
-    # Should not be 401 or 405 (will be redirect or error due to missing device connection)
+    # Should not be 401 or 405 (will be redirect or error due to missing device)
     assert response.status_code not in [401, 405]
 
 
 def test_capture_all_endpoint_get_with_auth_token_still_405(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """Test that GET request to /capture_all endpoint returns 405 even with valid auth token."""
+    """Test GET request to /capture_all returns 405 even with valid token."""
     hosts_csv = tmp_path / "hosts.csv"
     hosts_csv.write_text(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
@@ -1384,4 +1384,3 @@ def test_capture_all_endpoint_get_with_auth_token_still_405(
 
     # Should be 405 regardless of valid token
     assert response.status_code == 405
-
