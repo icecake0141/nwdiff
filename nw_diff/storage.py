@@ -26,11 +26,17 @@ DEST_DIR = "dest"
 DIFF_DIR = "diff"
 BACKUP_DIR = "backup"
 
-# Create required directories if they do not exist
-os.makedirs(ORIGIN_DIR, exist_ok=True)
-os.makedirs(DEST_DIR, exist_ok=True)
-os.makedirs(DIFF_DIR, exist_ok=True)
-os.makedirs(BACKUP_DIR, exist_ok=True)
+
+def _ensure_directories():
+    """Create required directories if they do not exist."""
+    os.makedirs(ORIGIN_DIR, exist_ok=True)
+    os.makedirs(DEST_DIR, exist_ok=True)
+    os.makedirs(DIFF_DIR, exist_ok=True)
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+
+
+# Create directories on module import for backward compatibility
+_ensure_directories()
 
 
 def get_backup_filename(filepath):

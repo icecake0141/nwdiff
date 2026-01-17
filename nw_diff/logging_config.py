@@ -18,7 +18,15 @@ import os
 
 # Configure logging
 LOGS_DIR = "logs"
-os.makedirs(LOGS_DIR, exist_ok=True)
+
+
+def _ensure_log_directory():
+    """Create logs directory if it does not exist."""
+    os.makedirs(LOGS_DIR, exist_ok=True)
+
+
+# Create log directory on module import
+_ensure_log_directory()
 
 # Create logger
 logger = logging.getLogger("nw-diff")
