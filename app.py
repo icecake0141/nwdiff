@@ -343,7 +343,7 @@ def host_detail(hostname):
 def compare_files():
     """
     Renders a form to select two hosts, directory (origin/dest), and command.
-    When submitted, compares command output between two hosts for the same 
+    When submitted, compares command output between two hosts for the same
     base directory (origin/dest), reads corresponding files and computes diff.
     Validates all inputs to prevent path traversal attacks.
     """
