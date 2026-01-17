@@ -915,3 +915,319 @@ def test_compare_files_response_escapes_xss(tmp_path: Path, monkeypatch) -> None
         # Raw HTML should NOT be in response
         assert "<img src=x onerror=" not in html_content
         assert "alert(1)" not in html_content or "&quot;alert(1)&quot;" in html_content
+
+
+# --- Authentication Tests ---
+
+
+def test_capture_endpoint_requires_auth_missing_token(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Test that /capture endpoint requires authentication - missing token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get("/capture/origin/router1")
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_capture_endpoint_requires_auth_invalid_token(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Test that /capture endpoint requires authentication - invalid token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/capture/origin/router1",
+            headers={"Authorization": "Bearer wrong_token"},
+        )
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_capture_endpoint_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
+    """Test that /capture endpoint accepts valid token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/capture/origin/router1",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    # Should not be 401 (will be 404 or 500 due to missing device connection)
+    assert response.status_code != 401
+
+
+def test_capture_all_endpoint_requires_auth_missing_token(monkeypatch) -> None:
+    """Test that /capture_all endpoint requires authentication - missing token."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get("/capture_all/origin")
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_capture_all_endpoint_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
+    """Test that /capture_all endpoint accepts valid token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/capture_all/origin",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    # Should not be 401 (will be redirect or error due to missing device connection)
+    assert response.status_code != 401
+
+
+def test_logs_view_requires_auth_missing_token(monkeypatch) -> None:
+    """Test that /logs endpoint requires authentication - missing token."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get("/logs")
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_logs_view_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
+    """Test that /logs endpoint accepts valid token."""
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    log_file = logs_dir / "nw-diff.log"
+    log_file.write_text("Test log line\n", encoding="utf-8")
+    monkeypatch.setattr(app, "LOGS_DIR", str(logs_dir))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/logs",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    assert response.status_code == 200
+    assert b"Test log line" in response.data
+
+
+def test_logs_api_requires_auth_missing_token(monkeypatch) -> None:
+    """Test that /api/logs endpoint requires authentication - missing token."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get("/api/logs")
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_logs_api_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
+    """Test that /api/logs endpoint accepts valid token."""
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    log_file = logs_dir / "nw-diff.log"
+    log_file.write_text("Test log line\n", encoding="utf-8")
+    monkeypatch.setattr(app, "LOGS_DIR", str(logs_dir))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/api/logs",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    assert response.status_code == 200
+    json_data = response.get_json()
+    assert "logs" in json_data
+
+
+def test_export_diff_requires_auth_missing_token(monkeypatch) -> None:
+    """Test that /export endpoint requires authentication - missing token."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get("/export/router1")
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_export_diff_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
+    """Test that /export endpoint accepts valid token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(tmp_path / "origin"))
+    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/export/router1",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    # Should not be 401 (will be 200 with HTML content)
+    assert response.status_code != 401
+
+
+def test_export_json_requires_auth_missing_token(monkeypatch) -> None:
+    """Test that /api/export endpoint requires authentication - missing token."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get("/api/export/router1")
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_export_json_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
+    """Test that /api/export endpoint accepts valid token."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(tmp_path / "origin"))
+    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/api/export/router1",
+            headers={"Authorization": "Bearer test_secret_token"},
+        )
+
+    # Should not be 401 (will be 200 with JSON content)
+    assert response.status_code != 401
+
+
+def test_auth_no_token_configured_allows_access(tmp_path: Path, monkeypatch) -> None:
+    """Test that endpoints work without authentication when token is not configured."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(tmp_path / "origin"))
+    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+
+    with app.app.test_client() as client:
+        # /api/export should work without token when NW_DIFF_API_TOKEN is not set
+        response = client.get("/api/export/router1")
+        # Will get 200 or other non-401 status
+        assert response.status_code != 401
+
+
+def test_auth_invalid_format_bearer_missing(monkeypatch) -> None:
+    """Test that invalid Authorization header format is rejected."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        # Send token without "Bearer " prefix
+        response = client.get(
+            "/api/logs",
+            headers={"Authorization": "test_secret_token"},
+        )
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_auth_empty_token_after_bearer(monkeypatch) -> None:
+    """Test that 'Bearer' without a token is rejected."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        # Send "Bearer" without actual token
+        response = client.get(
+            "/api/logs",
+            headers={"Authorization": "Bearer"},
+        )
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_auth_bearer_with_only_space(monkeypatch) -> None:
+    """Test that 'Bearer ' with only space is rejected."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        # Send "Bearer " with space but no token
+        response = client.get(
+            "/api/logs",
+            headers={"Authorization": "Bearer "},
+        )
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_auth_does_not_leak_internal_details(monkeypatch) -> None:
+    """Test that authentication errors do not leak sensitive information."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        response = client.get(
+            "/api/logs",
+            headers={"Authorization": "Bearer wrong_token"},
+        )
+
+    assert response.status_code == 401
+    json_data = response.get_json()
+    assert json_data is not None
+    # Error message should be generic
+    assert json_data["error"] == "Authentication required"
+    # Should not contain details about the expected token
+    assert "test_secret_token" not in str(json_data)
+    assert "NW_DIFF_API_TOKEN" not in str(json_data)

@@ -15,11 +15,14 @@ Review required for correctness, security, and licensing.
 
 import csv
 import datetime
+import hmac
 import html as html_lib
 import logging
 import logging.handlers
 import os
 import re
+
+from functools import wraps
 
 from flask import (
     Flask,
@@ -101,6 +104,63 @@ os.makedirs(ORIGIN_DIR, exist_ok=True)
 os.makedirs(DEST_DIR, exist_ok=True)
 os.makedirs(DIFF_DIR, exist_ok=True)
 os.makedirs(BACKUP_DIR, exist_ok=True)
+
+
+# --- Authentication decorator ---
+def require_api_token(f):
+    """
+    Decorator to require API token authentication for sensitive endpoints.
+    Token is checked from Authorization: Bearer <token> header.
+    The expected token is read from NW_DIFF_API_TOKEN environment variable.
+    Returns 401 for missing or invalid tokens without leaking internal details.
+    """
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        expected_token = os.environ.get("NW_DIFF_API_TOKEN")
+
+        # If no token is configured, authentication is not enforced
+        if not expected_token:
+            logger.warning(
+                "NW_DIFF_API_TOKEN not set - authentication not enforced for %s",
+                request.path,
+            )
+            return f(*args, **kwargs)
+
+        # Check Authorization header
+        auth_header = request.headers.get("Authorization")
+
+        if not auth_header:
+            logger.warning(
+                "Unauthorized access attempt to %s - missing Authorization header",
+                request.path,
+            )
+            return jsonify({"error": "Authentication required"}), 401
+
+        # Check for Bearer token format with at least one character after
+        # "Bearer " is 7 characters, so we need at least 8 characters total
+        if not auth_header.startswith("Bearer ") or len(auth_header) < 8:
+            logger.warning(
+                "Unauthorized access attempt to %s - invalid Authorization format",
+                request.path,
+            )
+            return jsonify({"error": "Authentication required"}), 401
+
+        # Extract token (everything after "Bearer ")
+        token = auth_header[7:]  # Remove "Bearer " prefix
+
+        # Use constant-time comparison to prevent timing attacks
+        # hmac.compare_digest safely handles tokens of different lengths
+        if not hmac.compare_digest(token, expected_token):
+            logger.warning(
+                "Unauthorized access attempt to %s - invalid token", request.path
+            )
+            return jsonify({"error": "Authentication required"}), 401
+
+        # Token is valid, proceed with the request
+        return f(*args, **kwargs)
+
+    return decorated_function
 
 
 # --- Security validation functions ---
@@ -509,6 +569,7 @@ def generate_side_by_side_html(origin_data, dest_data):
 
 # --- Capture endpoint for individual host ---
 @app.route("/capture/<base>/<hostname>")
+@require_api_token
 def capture(base, hostname):
     """
     Triggered when clicking the "Capture Origin" or "Capture Dest"
@@ -576,6 +637,7 @@ def capture(base, hostname):
 
 # --- New endpoint: Capture for all devices ---
 @app.route("/capture_all/<base>")
+@require_api_token
 def capture_all(base):
     """
     Captures data for all devices registered in hosts.csv.
@@ -865,6 +927,7 @@ def compare_files():
 
 # --- Export diff HTML for a host ---
 @app.route("/export/<hostname>")
+@require_api_token
 def export_diff(hostname):
     """
     Generates and returns a downloadable HTML file containing all diff results
@@ -986,6 +1049,7 @@ def export_diff(hostname):
 
 # --- JSON Export API endpoint ---
 @app.route("/api/export/<hostname>")
+@require_api_token
 def export_json(hostname):
     """
     JSON export endpoint that returns all command results, timestamps, and diff status
@@ -1070,6 +1134,7 @@ def export_json(hostname):
 
 # --- Logs Web UI ---
 @app.route("/logs")
+@require_api_token
 def logs_view():
     """
     Web UI for viewing logs.
@@ -1095,6 +1160,7 @@ def logs_view():
 
 # --- Logs API Endpoint ---
 @app.route("/api/logs")
+@require_api_token
 def logs_api():
     """
     API endpoint for programmatic access to logs.
