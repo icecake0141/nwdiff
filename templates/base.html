@@ -54,13 +54,16 @@
     <script>
         // When any capture button is clicked, show spinner overlay
         document.addEventListener('DOMContentLoaded', function() {
-            const captureButtons = document.querySelectorAll('.capture-btn');
+            const captureForms = document.querySelectorAll('form');
             const spinner = document.getElementById('spinner');
 
-            captureButtons.forEach(function(button) {
-                button.addEventListener('click', function() {
-                    spinner.style.display = 'flex';
-                });
+            captureForms.forEach(function(form) {
+                const submitBtn = form.querySelector('.capture-btn');
+                if (submitBtn) {
+                    form.addEventListener('submit', function() {
+                        spinner.style.display = 'flex';
+                    });
+                }
             });
         });
     </script>

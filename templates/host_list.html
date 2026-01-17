@@ -7,8 +7,12 @@
 
 <!-- New buttons for capturing all devices and file comparison -->
 <div class="mb-3">
-    <a href="{{ url_for('capture_all', base='origin') }}" class="btn btn-success btn-lg capture-btn">Capture Origin All</a>
-    <a href="{{ url_for('capture_all', base='dest') }}" class="btn btn-primary btn-lg capture-btn">Capture Dest All</a>
+    <form method="post" action="{{ url_for('capture_all', base='origin') }}" style="display: inline;">
+        <button type="submit" class="btn btn-success btn-lg capture-btn">Capture Origin All</button>
+    </form>
+    <form method="post" action="{{ url_for('capture_all', base='dest') }}" style="display: inline;">
+        <button type="submit" class="btn btn-primary btn-lg capture-btn">Capture Dest All</button>
+    </form>
     <a href="{{ url_for('compare_files') }}" class="btn btn-info btn-lg">Compare Files</a>
 </div>
 
@@ -71,8 +75,12 @@
                 {% endfor %}
             </td>
             <td>
-                <a href="{{ url_for('capture', base='origin', hostname=host.host) }}" class="btn btn-success btn-sm mb-1 capture-btn">Capture Origin</a>
-                <a href="{{ url_for('capture', base='dest', hostname=host.host) }}" class="btn btn-primary btn-sm mb-1 capture-btn">Capture Dest</a>
+                <form method="post" action="{{ url_for('capture', base='origin', hostname=host.host) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-success btn-sm mb-1 capture-btn">Capture Origin</button>
+                </form>
+                <form method="post" action="{{ url_for('capture', base='dest', hostname=host.host) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-primary btn-sm mb-1 capture-btn">Capture Dest</button>
+                </form>
                 <a href="{{ url_for('host_detail', hostname=host.host) }}" class="btn btn-secondary btn-sm mb-1">View Details</a>
                 <a href="{{ url_for('export_diff', hostname=host.host) }}" class="btn btn-warning btn-sm mb-1">Export</a>
             </td>
