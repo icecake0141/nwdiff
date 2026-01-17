@@ -3,7 +3,8 @@ dest/
 origin/
 diff/
 backup/
-logs/*.log
+logs/
+!logs/.gitkeep
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
