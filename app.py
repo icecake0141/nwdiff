@@ -13,16 +13,8 @@ This file was created or modified with the assistance of an AI (Large Language M
 Review required for correctness, security, and licensing.
 """
 
-import csv
-import datetime
-import hmac
-import html as html_lib
-import logging
-import logging.handlers
 import os
 import re
-
-from functools import wraps
 
 from flask import (
     Flask,
@@ -33,539 +25,30 @@ from flask import (
     request,
     url_for,
 )
-from diff_match_patch import diff_match_patch
 from netmiko import ConnectHandler
 
+# Import from nw_diff modules
+from nw_diff.logging_config import logger
+from nw_diff.auth import require_api_token
+from nw_diff.security import (
+    validate_hostname,
+    validate_command,
+    validate_base_directory,
+)
+from nw_diff.storage import (
+    get_file_path,
+    get_diff_file_path,
+    get_file_mtime,
+    create_backup,
+)
+from nw_diff.diff import compute_diff_status, compute_diff, generate_side_by_side_html
+from nw_diff.devices import (
+    read_hosts_csv,
+    get_device_info,
+    get_commands_for_host,
+)
+
 app = Flask(__name__)
-
-# Configure logging
-LOGS_DIR = "logs"
-os.makedirs(LOGS_DIR, exist_ok=True)
-
-# Create logger
-logger = logging.getLogger("nw-diff")
-logger.setLevel(logging.DEBUG)
-
-# Create rotating file handler (10MB max, keep 5 backup files)
-log_file = os.path.join(LOGS_DIR, "nw-diff.log")
-file_handler = logging.handlers.RotatingFileHandler(
-    log_file, maxBytes=10 * 1024 * 1024, backupCount=5
-)
-file_handler.setLevel(logging.DEBUG)
-
-# Create console handler for development
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-
-# Create formatter using lazy % formatting
-formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-file_handler.setFormatter(formatter)
-console_handler.setFormatter(formatter)
-
-# Add handlers to logger (only if not already added to prevent duplicates)
-if not logger.handlers:
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-
-logger.info("NW-Diff application starting")
-
-# Directories and CSV file settings
-ORIGIN_DIR = "origin"
-DEST_DIR = "dest"  # Changed from "dear" to "dest"
-DIFF_DIR = "diff"  # Directory to store diff HTML files
-BACKUP_DIR = "backup"  # Directory to store backup files
-HOSTS_CSV = "hosts.csv"
-
-# Device model specific command lists
-DEVICE_COMMANDS = {
-    "fortinet": (
-        "get system status",
-        "diag switch physical-ports summary",
-        "diag switch trunk summary",
-        "diag switch trunk list",
-        "diag stp vlan list",
-    ),
-    "cisco": (
-        "show version",
-        "show running-config",
-    ),
-    "junos": (
-        "show chassis hardware",
-        "show route",
-    ),
-}
-# Default commands if model does not match
-DEFAULT_COMMANDS = ("show version",)
-
-# Create required directories if they do not exist
-os.makedirs(ORIGIN_DIR, exist_ok=True)
-os.makedirs(DEST_DIR, exist_ok=True)
-os.makedirs(DIFF_DIR, exist_ok=True)
-os.makedirs(BACKUP_DIR, exist_ok=True)
-
-
-# --- Authentication decorator ---
-def require_api_token(f):
-    """
-    Decorator to require API token authentication for sensitive endpoints.
-    Token is checked from Authorization: Bearer <token> header.
-    The expected token is read from NW_DIFF_API_TOKEN environment variable.
-    Returns 401 for missing or invalid tokens without leaking internal details.
-    """
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        expected_token = os.environ.get("NW_DIFF_API_TOKEN")
-
-        # If no token is configured, authentication is not enforced
-        if not expected_token:
-            logger.warning(
-                "NW_DIFF_API_TOKEN not set - authentication not enforced for %s",
-                request.path,
-            )
-            return f(*args, **kwargs)
-
-        # Check Authorization header
-        auth_header = request.headers.get("Authorization")
-
-        if not auth_header:
-            logger.warning(
-                "Unauthorized access attempt to %s - missing Authorization header",
-                request.path,
-            )
-            return jsonify({"error": "Authentication required"}), 401
-
-        # Check for Bearer token format with at least one character after
-        # "Bearer " is 7 characters, so we need at least 8 characters total
-        if not auth_header.startswith("Bearer ") or len(auth_header) < 8:
-            logger.warning(
-                "Unauthorized access attempt to %s - invalid Authorization format",
-                request.path,
-            )
-            return jsonify({"error": "Authentication required"}), 401
-
-        # Extract token (everything after "Bearer ")
-        token = auth_header[7:]  # Remove "Bearer " prefix
-
-        # Use constant-time comparison to prevent timing attacks
-        # hmac.compare_digest safely handles tokens of different lengths
-        if not hmac.compare_digest(token, expected_token):
-            logger.warning(
-                "Unauthorized access attempt to %s - invalid token", request.path
-            )
-            return jsonify({"error": "Authentication required"}), 401
-
-        # Token is valid, proceed with the request
-        return f(*args, **kwargs)
-
-    return decorated_function
-
-
-# --- Security validation functions ---
-def validate_hostname(hostname):
-    """
-    Validates hostname to prevent path traversal attacks.
-    Only allows alphanumeric characters, hyphens, underscores, and dots.
-    Blocks path separators, parent directory references, and absolute paths.
-
-    Args:
-        hostname: The hostname string to validate
-
-    Returns:
-        True if valid, False otherwise
-    """
-    if not hostname:
-        return False
-    # Block common path traversal patterns
-    if ".." in hostname or "/" in hostname or "\\" in hostname:
-        logger.warning("Rejected hostname with traversal pattern: %s", hostname)
-        return False
-    # Only allow safe characters: alphanumeric, hyphen, underscore, dot
-    if not re.match(r"^[a-zA-Z0-9._-]+$", hostname):
-        logger.warning("Rejected hostname with invalid characters: %s", hostname)
-        return False
-    return True
-
-
-def validate_command(command):
-    """
-    Validates command string to prevent path traversal attacks.
-    Only allows alphanumeric characters, spaces, hyphens, underscores.
-    Blocks path separators and parent directory references.
-
-    Args:
-        command: The command string to validate
-
-    Returns:
-        True if valid, False otherwise
-    """
-    if not command:
-        return False
-    # Block common path traversal patterns
-    if ".." in command or "/" in command or "\\" in command:
-        logger.warning("Rejected command with traversal pattern: %s", command)
-        return False
-    # Only allow safe characters: alphanumeric, space, hyphen, underscore
-    if not re.match(r"^[a-zA-Z0-9 _-]+$", command):
-        logger.warning("Rejected command with invalid characters: %s", command)
-        return False
-    return True
-
-
-def validate_base_directory(base):
-    """
-    Validates that base is one of the allowed directory names.
-
-    Args:
-        base: The base directory name
-
-    Returns:
-        True if valid, False otherwise
-    """
-    return base in ["origin", "dest"]
-
-
-# --- Backup helper functions ---
-def get_backup_filename(filepath):
-    """
-    Generates a backup filename with timestamp.
-    Format: YYYYMMDD_HHMMSS_hostname-command.txt
-    """
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = os.path.basename(filepath)
-    return os.path.join(BACKUP_DIR, f"{timestamp}_{filename}")
-
-
-def rotate_backups(filepath):
-    """
-    Keeps only the last 10 backups for a given file.
-    Deletes older backups beyond the 10 most recent.
-    """
-    if not os.path.exists(BACKUP_DIR):
-        return
-
-    filename = os.path.basename(filepath)
-    # Find all backups for this file
-    backup_files = []
-    for backup_file in os.listdir(BACKUP_DIR):
-        if backup_file.endswith(f"_{filename}"):
-            backup_path = os.path.join(BACKUP_DIR, backup_file)
-            backup_files.append((backup_path, os.path.getmtime(backup_path)))
-
-    # Sort by modification time (newest first)
-    backup_files.sort(key=lambda x: x[1], reverse=True)
-
-    # Keep only the 10 most recent, delete the rest
-    for backup_path, _ in backup_files[10:]:
-        try:
-            os.remove(backup_path)
-        except OSError:
-            pass
-
-
-def create_backup(filepath):
-    """
-    Creates a backup of the file before it is overwritten.
-    Only creates backup if the file exists.
-    After backup creation, rotates backups to keep only the last 10.
-    """
-    if os.path.exists(filepath):
-        backup_path = get_backup_filename(filepath)
-        try:
-            with open(filepath, "r", encoding="utf-8") as src:
-                content = src.read()
-            with open(backup_path, "w", encoding="utf-8") as dst:
-                dst.write(content)
-            rotate_backups(filepath)
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            logger.warning("Failed to create backup for %s: %s", filepath, exc)
-
-
-# --- Helper function to read CSV and skip comment lines ---
-def read_hosts_csv():
-    """
-    Reads the CSV file while ignoring lines that start with '#' (comments).
-    Returns a list of dictionaries (CSV rows).
-    """
-    try:
-        with open(HOSTS_CSV, newline="", encoding="utf-8") as csvfile:
-            filtered = (line for line in csvfile if not line.lstrip().startswith("#"))
-            reader = csv.DictReader(filtered)
-            rows = list(reader)
-            logger.debug("Successfully read %d host(s) from CSV", len(rows))
-            return rows
-    except FileNotFoundError:
-        logger.error("Hosts CSV file not found: %s", HOSTS_CSV)
-        return []
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        logger.error("Error reading hosts CSV file: %s", exc)
-        return []
-
-
-# --- Helper function to get device info from CSV ---
-def get_device_info(host):
-    """
-    Retrieves the device info dictionary from CSV for the given host.
-    Returns None if the host is not found.
-    """
-    rows = read_hosts_csv()
-    for row in rows:
-        if row["host"] == host:
-            logger.debug("Found device info for host: %s", host)
-            return row
-    logger.warning("Device info not found for host: %s", host)
-    return None
-
-
-# --- Helper function to get command list based on device model ---
-def get_commands_for_host(host):
-    """
-    Retrieves the device's model from CSV and returns the corresponding command tuple.
-    If not found, returns DEFAULT_COMMANDS.
-    """
-    rows = read_hosts_csv()
-    for row in rows:
-        if row["host"] == host:
-            model = row.get("model", "").lower()
-            return DEVICE_COMMANDS.get(model, DEFAULT_COMMANDS)
-    return DEFAULT_COMMANDS
-
-
-# --- Helper function to get file modification time ---
-def get_file_mtime(filepath):
-    """
-    Returns the modification time of the file in a formatted string,
-    or 'file not found' if the file does not exist.
-    """
-    if os.path.exists(filepath):
-        return datetime.datetime.fromtimestamp(os.path.getmtime(filepath)).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-    return "file not found"
-
-
-# --- Helper functions for file paths ---
-def get_file_path(host, command, base):
-    """
-    base: "origin" or "dest"
-    Constructs the filename using the host and command
-    (spaces replaced with underscores).
-    Validates inputs to prevent path traversal attacks.
-    """
-    # Validate inputs
-    if not validate_hostname(host):
-        raise ValueError(f"Invalid hostname: {host}")
-    if not validate_command(command):
-        raise ValueError(f"Invalid command: {command}")
-    if not validate_base_directory(base):
-        raise ValueError(f"Invalid base directory: {base}")
-
-    # Construct filename
-    safe_command = command.replace(" ", "_")
-    filename = f"{host}-{safe_command}.txt"
-
-    # Get base directory path
-    if base == "origin":
-        base_dir = ORIGIN_DIR
-    else:  # base == "dest" (already validated)
-        base_dir = DEST_DIR
-
-    # Construct full path and normalize it
-    full_path = os.path.join(base_dir, filename)
-    normalized_path = os.path.normpath(full_path)
-
-    # Verify the normalized path is still within the intended base directory
-    base_abs = os.path.abspath(base_dir)
-    path_abs = os.path.abspath(normalized_path)
-
-    if not path_abs.startswith(base_abs + os.sep) and path_abs != base_abs:
-        logger.error(
-            "Path traversal attempt detected: %s escapes %s", path_abs, base_abs
-        )
-        raise ValueError("Path traversal detected")
-
-    return normalized_path
-
-
-def get_diff_file_path(host, command):
-    """
-    Constructs the path for the diff file.
-    Validates inputs to prevent path traversal attacks.
-    """
-    # Validate inputs
-    if not validate_hostname(host):
-        raise ValueError(f"Invalid hostname: {host}")
-    if not validate_command(command):
-        raise ValueError(f"Invalid command: {command}")
-
-    # Construct filename
-    safe_command = command.replace(" ", "_")
-    filename = f"{host}-{safe_command}-diff.html"
-
-    # Construct full path and normalize it
-    full_path = os.path.join(DIFF_DIR, filename)
-    normalized_path = os.path.normpath(full_path)
-
-    # Verify the normalized path is still within the diff directory
-    diff_abs = os.path.abspath(DIFF_DIR)
-    path_abs = os.path.abspath(normalized_path)
-
-    if not path_abs.startswith(diff_abs + os.sep) and path_abs != diff_abs:
-        logger.error(
-            "Path traversal attempt detected: %s escapes %s", path_abs, diff_abs
-        )
-        raise ValueError("Path traversal detected")
-
-    return normalized_path
-
-
-# --- Helper function to compute diff status only ---
-def compute_diff_status(origin_data, dest_data):
-    """
-    Uses diff_match_patch to compute the diff between origin and dest data,
-    and returns "identical" if there are no differences, otherwise "changes detected".
-    """
-    dmp = diff_match_patch()
-    diffs = dmp.diff_main(origin_data, dest_data)
-    dmp.diff_cleanupSemantic(diffs)
-    if len(diffs) == 1 and diffs[0][0] == 0:
-        return "identical"
-    return "changes detected"
-
-
-# --- Helper function to compute diff HTML and status ---
-def compute_diff(origin_data, dest_data, view="inline"):
-    """
-    Computes diff information using diff_match_patch.
-    For inline view:
-      - If a line contains any diff tags, the entire line is
-        highlighted with a yellow background.
-      - Additionally, text within <del> tags gets a red background
-        and text within <ins> tags gets a blue background.
-    """
-    dmp = diff_match_patch()
-    diffs = dmp.diff_main(origin_data, dest_data)
-    dmp.diff_cleanupSemantic(diffs)
-
-    if all(op == 0 for op, text in diffs):
-        status = "identical"
-        if view == "sidebyside":
-            diff_html = generate_side_by_side_html(origin_data, dest_data)
-        else:
-            # Escape HTML to prevent XSS
-            diff_html = f"<pre>{html_lib.escape(origin_data)}</pre>"
-    else:
-        status = "changes detected"
-        if view == "sidebyside":
-            diff_html = generate_side_by_side_html(origin_data, dest_data)
-        else:
-            # Note: diff_prettyHtml automatically escapes HTML entities in the text
-            # This has been verified - it converts < to &lt;, > to &gt;, etc.
-            raw_diff_html = dmp.diff_prettyHtml(diffs)
-            # Replace ¶ and &para; with line breaks
-            inline_html = raw_diff_html.replace("¶", "<br>").replace("&para;", "")
-
-            # Update at character level: add inline background color for diff tags
-            inline_html = inline_html.replace(
-                "<del>", '<del style="background-color: #ffcccc;">'
-            )
-            inline_html = inline_html.replace(
-                "<ins>", '<ins style="background-color: #cce5ff;">'
-            )
-
-            # Highlight entire lines that contain diff tags with a yellow background
-            lines = inline_html.split("<br>")
-            new_lines = []
-            for line in lines:
-                if "<del" in line or "<ins" in line:
-                    new_lines.append(
-                        f'<div style="background-color: #ffff99;">{line}</div>'
-                    )
-                else:
-                    new_lines.append(line)
-            diff_html = "<br>".join(new_lines)
-    return status, diff_html
-
-
-# --- Function to generate side-by-side diff HTML ---
-def generate_side_by_side_html(origin_data, dest_data):
-    """
-    Generates side-by-side HTML displaying the origin content
-    (common parts plus deletions) on the left and the destination
-    content (common parts plus insertions) on the right.
-    For each column:
-      - At the character level, text in <del> tags is highlighted
-        with a red background and text in <ins> tags with a blue
-        background.
-      - At the line level, any line containing diff tags is wrapped
-        with a yellow background.
-    All text is HTML-escaped to prevent XSS attacks.
-    """
-    dmp = diff_match_patch()
-    diffs = dmp.diff_main(origin_data, dest_data)
-    dmp.diff_cleanupSemantic(diffs)
-
-    origin_parts = []
-    dest_parts = []
-    for op, text in diffs:
-        # Escape text to prevent XSS
-        escaped_text = html_lib.escape(text)
-        if op == 0:
-            origin_parts.append(escaped_text)
-            dest_parts.append(escaped_text)
-        elif op == -1:
-            # Highlight deleted text with a red background
-            origin_parts.append(
-                f"<del style='background-color: #ffcccc;'>{escaped_text}</del>"
-            )
-        elif op == 1:
-            # Highlight added text with a blue background
-            dest_parts.append(
-                f"<ins style='background-color: #cce5ff;'>{escaped_text}</ins>"
-            )
-    origin_html = "".join(origin_parts)
-    dest_html = "".join(dest_parts)
-
-    # Replace newlines with <br> to preserve formatting
-    origin_html = origin_html.replace("\n", "<br>")
-    dest_html = dest_html.replace("\n", "<br>")
-
-    # Origin side: wrap lines containing diff tags with a yellow background
-    new_origin_lines = []
-    for line in origin_html.split("<br>"):
-        if "<del" in line or "<ins" in line:
-            new_origin_lines.append(
-                f"<div style='background-color: #ffff99;'>{line}</div>"
-            )
-        else:
-            new_origin_lines.append(line)
-    origin_html = "<br>".join(new_origin_lines)
-
-    # Destination side: wrap lines containing diff tags with a yellow background
-    new_dest_lines = []
-    for line in dest_html.split("<br>"):
-        if "<del" in line or "<ins" in line:
-            new_dest_lines.append(
-                f"<div style='background-color: #ffff99;'>{line}</div>"
-            )
-        else:
-            new_dest_lines.append(line)
-    dest_html = "<br>".join(new_dest_lines)
-
-    # Build the side-by-side table HTML
-    table_class = "table table-bordered"
-    table_style = "width:100%; border-collapse: collapse;"
-    td_style = "vertical-align: top; width:50%; white-space: pre-wrap;"
-    html = f"""<table class="{table_class}" style="{table_style}">
-  <tr>
-    <td style="{td_style}">{origin_html}</td>
-    <td style="{td_style}">{dest_html}</td>
-  </tr>
-</table>"""
-    return html
 
 
 # --- Capture endpoint for individual host ---
@@ -1143,7 +626,12 @@ def logs_view():
     """
     logger.debug("Logs view page requested")
     # Read the last 1000 lines from the log file
-    log_file_path = os.path.join(LOGS_DIR, "nw-diff.log")
+    # Import LOGS_DIR at runtime to allow test mocking
+    from nw_diff.logging_config import (  # pylint: disable=import-outside-toplevel
+        LOGS_DIR as current_logs_dir,
+    )
+
+    log_file_path = os.path.join(current_logs_dir, "nw-diff.log")
     lines = []
     try:
         if os.path.exists(log_file_path):
@@ -1184,7 +672,12 @@ def logs_api():
 
     tail = request.args.get("tail", "true").lower() == "true"
 
-    log_file_path = os.path.join(LOGS_DIR, "nw-diff.log")
+    # Import LOGS_DIR at runtime to allow test mocking
+    from nw_diff.logging_config import (  # pylint: disable=import-outside-toplevel
+        LOGS_DIR as current_logs_dir,
+    )
+
+    log_file_path = os.path.join(current_logs_dir, "nw-diff.log")
     log_entries = []
 
     try:

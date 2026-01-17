@@ -25,9 +25,10 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import app  # pylint: disable=wrong-import-position,import-error
+from nw_diff import auth, security, storage, diff, devices, logging_config
 
 
 def test_read_hosts_csv_skips_comments(tmp_path: Path, monkeypatch) -> None:
@@ -40,9 +41,9 @@ def test_read_hosts_csv_skips_comments(tmp_path: Path, monkeypatch) -> None:
         "router2,10.0.0.2,admin,22,fortinet\n"
     )
     hosts_csv.write_text(csv_content, encoding="utf-8")
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
-    rows = app.read_hosts_csv()
+    rows = devices.read_hosts_csv()
 
     assert len(rows) == 2
     assert rows[0]["host"] == "router1"
@@ -55,11 +56,11 @@ def test_get_commands_for_host_uses_model(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
-    commands = app.get_commands_for_host("router1")
+    commands = devices.get_commands_for_host("router1")
 
-    assert commands == app.DEVICE_COMMANDS["cisco"]
+    assert commands == devices.DEVICE_COMMANDS["cisco"]
 
 
 def test_get_device_info_missing_host_returns_none(tmp_path: Path, monkeypatch) -> None:
@@ -69,9 +70,9 @@ def test_get_device_info_missing_host_returns_none(tmp_path: Path, monkeypatch) 
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
-    device_info = app.get_device_info("router2")
+    device_info = devices.get_device_info("router2")
 
     assert device_info is None
 
@@ -85,32 +86,32 @@ def test_get_commands_for_host_returns_default_for_unknown_model(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,unknown\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
-    commands = app.get_commands_for_host("router1")
+    commands = devices.get_commands_for_host("router1")
 
-    assert commands == app.DEFAULT_COMMANDS
+    assert commands == devices.DEFAULT_COMMANDS
 
 
 def test_get_file_path_invalid_base_raises() -> None:
     """Raise a ValueError when the base directory is invalid."""
     with pytest.raises(ValueError, match="Invalid base"):
-        app.get_file_path("router1", "show version", "archive")
+        storage.get_file_path("router1", "show version", "archive")
 
 
 def test_compute_diff_status_identical() -> None:
     """Return identical status when content matches."""
-    assert app.compute_diff_status("same", "same") == "identical"
+    assert diff.compute_diff_status("same", "same") == "identical"
 
 
 def test_compute_diff_status_changes() -> None:
     """Return changes detected status when content differs."""
-    assert app.compute_diff_status("before", "after") == "changes detected"
+    assert diff.compute_diff_status("before", "after") == "changes detected"
 
 
 def test_compute_diff_inline_contains_diff_markup() -> None:
     """Inline diff should include markup when differences exist."""
-    status, diff_html = app.compute_diff(
+    status, diff_html = diff.compute_diff(
         "hello\nworld\n", "hello\nthere\n", view="inline"
     )
 
@@ -120,7 +121,7 @@ def test_compute_diff_inline_contains_diff_markup() -> None:
 
 def test_generate_side_by_side_html_includes_highlights() -> None:
     """Side-by-side HTML should include diff and line highlights."""
-    html = app.generate_side_by_side_html("hello\nworld\n", "hello\nthere\n")
+    html = diff.generate_side_by_side_html("hello\nworld\n", "hello\nthere\n")
 
     assert "<del" in html
     assert "<ins" in html
@@ -129,10 +130,10 @@ def test_generate_side_by_side_html_includes_highlights() -> None:
 
 def test_get_backup_filename_format(tmp_path: Path, monkeypatch) -> None:
     """Ensure backup filename follows the correct format."""
-    monkeypatch.setattr(app, "BACKUP_DIR", str(tmp_path / "backup"))
+    monkeypatch.setattr(storage, "BACKUP_DIR", str(tmp_path / "backup"))
     filepath = "/home/runner/work/nwdiff/nwdiff/origin/router1-show_version.txt"
 
-    backup_filename = app.get_backup_filename(filepath)
+    backup_filename = storage.get_backup_filename(filepath)
 
     # Check that backup filename includes timestamp and original filename
     assert "router1-show_version.txt" in backup_filename
@@ -146,13 +147,13 @@ def test_create_backup_when_file_exists(tmp_path: Path, monkeypatch) -> None:
     """Backup should be created when file exists."""
     backup_dir = tmp_path / "backup"
     backup_dir.mkdir()
-    monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
+    monkeypatch.setattr(storage, "BACKUP_DIR", str(backup_dir))
 
     # Create a test file
     test_file = tmp_path / "test.txt"
     test_file.write_text("original content", encoding="utf-8")
 
-    app.create_backup(str(test_file))
+    storage.create_backup(str(test_file))
 
     # Check that backup was created
     backup_files = list(backup_dir.glob("*_test.txt"))
@@ -164,12 +165,12 @@ def test_create_backup_when_file_does_not_exist(tmp_path: Path, monkeypatch) -> 
     """No backup should be created when file does not exist."""
     backup_dir = tmp_path / "backup"
     backup_dir.mkdir()
-    monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
+    monkeypatch.setattr(storage, "BACKUP_DIR", str(backup_dir))
 
     # Try to backup a non-existent file
     test_file = tmp_path / "nonexistent.txt"
 
-    app.create_backup(str(test_file))
+    storage.create_backup(str(test_file))
 
     # Check that no backup was created
     backup_files = list(backup_dir.glob("*_nonexistent.txt"))
@@ -180,7 +181,7 @@ def test_rotate_backups_keeps_last_10(tmp_path: Path, monkeypatch) -> None:
     """Rotation should keep only the last 10 backups."""
     backup_dir = tmp_path / "backup"
     backup_dir.mkdir()
-    monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
+    monkeypatch.setattr(storage, "BACKUP_DIR", str(backup_dir))
 
     test_file = tmp_path / "test.txt"
     test_file.write_text("content", encoding="utf-8")
@@ -193,7 +194,7 @@ def test_rotate_backups_keeps_last_10(tmp_path: Path, monkeypatch) -> None:
         mtime = time.time() - (15 - i)
         os.utime(str(backup_path), (mtime, mtime))
 
-    app.rotate_backups(str(test_file))
+    storage.rotate_backups(str(test_file))
 
     # Check that only 10 backups remain
     backup_files = list(backup_dir.glob("*_test.txt"))
@@ -214,7 +215,7 @@ def test_export_json_returns_404_for_missing_hostname(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         response = client.get("/api/export/nonexistent")
@@ -231,9 +232,9 @@ def test_export_json_returns_valid_structure(tmp_path: Path, monkeypatch) -> Non
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(tmp_path / "origin"))
-    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(tmp_path / "origin"))
+    monkeypatch.setattr(storage, "DEST_DIR", str(tmp_path / "dest"))
 
     with app.app.test_client() as client:
         response = client.get("/api/export/router1")
@@ -255,14 +256,14 @@ def test_export_json_includes_command_data(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     origin_dir = tmp_path / "origin"
     dest_dir = tmp_path / "dest"
     origin_dir.mkdir()
     dest_dir.mkdir()
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
-    monkeypatch.setattr(app, "DEST_DIR", str(dest_dir))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(storage, "DEST_DIR", str(dest_dir))
 
     # Create test files for one command
     origin_file = origin_dir / "router1-show_version.txt"
@@ -297,14 +298,14 @@ def test_export_json_detects_identical_files(tmp_path: Path, monkeypatch) -> Non
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     origin_dir = tmp_path / "origin"
     dest_dir = tmp_path / "dest"
     origin_dir.mkdir()
     dest_dir.mkdir()
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
-    monkeypatch.setattr(app, "DEST_DIR", str(dest_dir))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(storage, "DEST_DIR", str(dest_dir))
 
     # Create identical test files
     origin_file = origin_dir / "router1-show_version.txt"
@@ -329,14 +330,14 @@ def test_export_json_detects_changes(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     origin_dir = tmp_path / "origin"
     dest_dir = tmp_path / "dest"
     origin_dir.mkdir()
     dest_dir.mkdir()
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
-    monkeypatch.setattr(app, "DEST_DIR", str(dest_dir))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(storage, "DEST_DIR", str(dest_dir))
 
     # Create different test files
     origin_file = origin_dir / "router1-show_version.txt"
@@ -357,21 +358,21 @@ def test_export_json_detects_changes(tmp_path: Path, monkeypatch) -> None:
 def test_logging_configuration_creates_log_file() -> None:
     """Test that logging is properly configured and creates log files."""
     # Import logger from app to verify it exists
-    assert app.logger is not None
-    assert app.logger.name == "nw-diff"
-    assert app.logger.level == app.logging.DEBUG
+    assert logging_config.logger is not None
+    assert logging_config.logger.name == "nw-diff"
+    assert logging_config.logger.level == logging.DEBUG
 
 
 def test_logger_handlers_not_duplicated_on_reimport() -> None:
     """Test that logger handlers are not duplicated on module re-import."""
     # Get the initial number of handlers
-    initial_handler_count = len(app.logger.handlers)
+    initial_handler_count = len(logging_config.logger.handlers)
 
     # Re-import the module (simulates WSGI reloading)
     importlib.reload(app)
 
     # Check that handlers were not duplicated
-    assert len(app.logger.handlers) == initial_handler_count
+    assert len(logging_config.logger.handlers) == initial_handler_count
 
 
 def test_create_backup_logs_warning_on_failure(
@@ -380,7 +381,7 @@ def test_create_backup_logs_warning_on_failure(
     """Test that create_backup logs a warning instead of using print() on failure."""
     backup_dir = tmp_path / "backup"
     backup_dir.mkdir()
-    monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
+    monkeypatch.setattr(storage, "BACKUP_DIR", str(backup_dir))
 
     # Create a test file
     test_file = tmp_path / "test.txt"
@@ -391,7 +392,7 @@ def test_create_backup_logs_warning_on_failure(
 
     # Call create_backup which should log a warning instead of printing
     with caplog.at_level(logging.WARNING):
-        app.create_backup(str(test_file))
+        storage.create_backup(str(test_file))
 
     # Verify that a warning was logged
     assert any("Failed to create backup" in record.message for record in caplog.records)
@@ -412,7 +413,7 @@ def test_logs_view_endpoint(tmp_path: Path, monkeypatch) -> None:
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(app, "LOGS_DIR", str(logs_dir))
+    monkeypatch.setattr(logging_config, "LOGS_DIR", str(logs_dir))
 
     with app.app.test_client() as client:
         response = client.get("/logs")
@@ -435,7 +436,7 @@ def test_logs_api_endpoint(tmp_path: Path, monkeypatch) -> None:
         encoding="utf-8",
     )
 
-    monkeypatch.setattr(app, "LOGS_DIR", str(logs_dir))
+    monkeypatch.setattr(logging_config, "LOGS_DIR", str(logs_dir))
 
     with app.app.test_client() as client:
         # Test basic API call
@@ -464,9 +465,9 @@ def test_logs_api_endpoint(tmp_path: Path, monkeypatch) -> None:
 def test_read_hosts_csv_handles_file_not_found(tmp_path: Path, monkeypatch) -> None:
     """Test that read_hosts_csv handles missing CSV gracefully."""
     non_existent = tmp_path / "nonexistent.csv"
-    monkeypatch.setattr(app, "HOSTS_CSV", str(non_existent))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(non_existent))
 
-    rows = app.read_hosts_csv()
+    rows = devices.read_hosts_csv()
 
     assert not rows
 
@@ -509,119 +510,119 @@ def test_debug_mode_enabled_with_env_var(monkeypatch) -> None:
 
 def test_validate_hostname_rejects_parent_directory() -> None:
     """Test that hostname validation rejects parent directory references."""
-    assert app.validate_hostname("..") is False
-    assert app.validate_hostname("../etc") is False
-    assert app.validate_hostname("test/../etc") is False
+    assert security.validate_hostname("..") is False
+    assert security.validate_hostname("../etc") is False
+    assert security.validate_hostname("test/../etc") is False
 
 
 def test_validate_hostname_rejects_path_separators() -> None:
     """Test that hostname validation rejects path separators."""
-    assert app.validate_hostname("/etc/passwd") is False
-    assert app.validate_hostname("test/file") is False
-    assert app.validate_hostname("test\\file") is False
-    assert app.validate_hostname("\\windows\\system32") is False
+    assert security.validate_hostname("/etc/passwd") is False
+    assert security.validate_hostname("test/file") is False
+    assert security.validate_hostname("test\\file") is False
+    assert security.validate_hostname("\\windows\\system32") is False
 
 
 def test_validate_hostname_rejects_invalid_characters() -> None:
     """Test that hostname validation rejects special characters."""
-    assert app.validate_hostname("test;rm -rf") is False
-    assert app.validate_hostname("test|cat") is False
-    assert app.validate_hostname("test&ls") is False
-    assert app.validate_hostname("test$var") is False
-    assert app.validate_hostname("test`whoami`") is False
+    assert security.validate_hostname("test;rm -rf") is False
+    assert security.validate_hostname("test|cat") is False
+    assert security.validate_hostname("test&ls") is False
+    assert security.validate_hostname("test$var") is False
+    assert security.validate_hostname("test`whoami`") is False
 
 
 def test_validate_hostname_accepts_valid_names() -> None:
     """Test that hostname validation accepts valid hostnames."""
-    assert app.validate_hostname("router1") is True
-    assert app.validate_hostname("switch-01") is True
-    assert app.validate_hostname("fw_main") is True
-    assert app.validate_hostname("host.example.com") is True
-    assert app.validate_hostname("router-123_backup") is True
+    assert security.validate_hostname("router1") is True
+    assert security.validate_hostname("switch-01") is True
+    assert security.validate_hostname("fw_main") is True
+    assert security.validate_hostname("host.example.com") is True
+    assert security.validate_hostname("router-123_backup") is True
 
 
 def test_validate_hostname_rejects_empty() -> None:
     """Test that hostname validation rejects empty strings."""
-    assert app.validate_hostname("") is False
-    assert app.validate_hostname(None) is False
+    assert security.validate_hostname("") is False
+    assert security.validate_hostname(None) is False
 
 
 def test_validate_command_rejects_parent_directory() -> None:
     """Test that command validation rejects parent directory references."""
-    assert app.validate_command("..") is False
-    assert app.validate_command("../etc/passwd") is False
-    assert app.validate_command("show ../../../etc/passwd") is False
+    assert security.validate_command("..") is False
+    assert security.validate_command("../etc/passwd") is False
+    assert security.validate_command("show ../../../etc/passwd") is False
 
 
 def test_validate_command_rejects_path_separators() -> None:
     """Test that command validation rejects path separators."""
-    assert app.validate_command("/etc/passwd") is False
-    assert app.validate_command("show /etc/passwd") is False
-    assert app.validate_command("show\\file") is False
+    assert security.validate_command("/etc/passwd") is False
+    assert security.validate_command("show /etc/passwd") is False
+    assert security.validate_command("show\\file") is False
 
 
 def test_validate_command_rejects_invalid_characters() -> None:
     """Test that command validation rejects special characters."""
-    assert app.validate_command("show version; rm -rf") is False
-    assert app.validate_command("show|cat") is False
-    assert app.validate_command("show&ls") is False
+    assert security.validate_command("show version; rm -rf") is False
+    assert security.validate_command("show|cat") is False
+    assert security.validate_command("show&ls") is False
 
 
 def test_validate_command_accepts_valid_commands() -> None:
     """Test that command validation accepts valid commands."""
-    assert app.validate_command("show version") is True
-    assert app.validate_command("show running-config") is True
-    assert app.validate_command("get system status") is True
-    assert app.validate_command("diag_switch_ports") is True
+    assert security.validate_command("show version") is True
+    assert security.validate_command("show running-config") is True
+    assert security.validate_command("get system status") is True
+    assert security.validate_command("diag_switch_ports") is True
 
 
 def test_validate_command_rejects_empty() -> None:
     """Test that command validation rejects empty strings."""
-    assert app.validate_command("") is False
-    assert app.validate_command(None) is False
+    assert security.validate_command("") is False
+    assert security.validate_command(None) is False
 
 
 def test_validate_base_directory_accepts_valid() -> None:
     """Test that base directory validation accepts only origin and dest."""
-    assert app.validate_base_directory("origin") is True
-    assert app.validate_base_directory("dest") is True
+    assert security.validate_base_directory("origin") is True
+    assert security.validate_base_directory("dest") is True
 
 
 def test_validate_base_directory_rejects_invalid() -> None:
     """Test that base directory validation rejects other values."""
-    assert app.validate_base_directory("backup") is False
-    assert app.validate_base_directory("../origin") is False
-    assert app.validate_base_directory("/tmp") is False
-    assert app.validate_base_directory("") is False
+    assert security.validate_base_directory("backup") is False
+    assert security.validate_base_directory("../origin") is False
+    assert security.validate_base_directory("/tmp") is False
+    assert security.validate_base_directory("") is False
 
 
 def test_get_file_path_rejects_traversal_in_hostname() -> None:
     """Test that get_file_path rejects path traversal in hostname."""
     with pytest.raises(ValueError, match="Invalid hostname"):
-        app.get_file_path("../etc", "show version", "origin")
+        storage.get_file_path("../etc", "show version", "origin")
     with pytest.raises(ValueError, match="Invalid hostname"):
-        app.get_file_path("../../etc/passwd", "show version", "origin")
+        storage.get_file_path("../../etc/passwd", "show version", "origin")
 
 
 def test_get_file_path_rejects_traversal_in_command() -> None:
     """Test that get_file_path rejects path traversal in command."""
     with pytest.raises(ValueError, match="Invalid command"):
-        app.get_file_path("router1", "../etc/passwd", "origin")
+        storage.get_file_path("router1", "../etc/passwd", "origin")
     with pytest.raises(ValueError, match="Invalid command"):
-        app.get_file_path("router1", "show ../../etc/passwd", "origin")
+        storage.get_file_path("router1", "show ../../etc/passwd", "origin")
 
 
 def test_get_file_path_rejects_invalid_base() -> None:
     """Test that get_file_path rejects invalid base directory."""
     with pytest.raises(ValueError, match="Invalid base"):
-        app.get_file_path("router1", "show version", "backup")
+        storage.get_file_path("router1", "show version", "backup")
     with pytest.raises(ValueError, match="Invalid base"):
-        app.get_file_path("router1", "show version", "../origin")
+        storage.get_file_path("router1", "show version", "../origin")
 
 
 def test_get_file_path_returns_normalized_path() -> None:
     """Test that get_file_path returns properly normalized paths."""
-    path = app.get_file_path("router1", "show version", "origin")
+    path = storage.get_file_path("router1", "show version", "origin")
     assert ".." not in path
     assert path.startswith("origin")
     assert "router1-show_version.txt" in path
@@ -630,9 +631,9 @@ def test_get_file_path_returns_normalized_path() -> None:
 def test_get_diff_file_path_rejects_traversal() -> None:
     """Test that get_diff_file_path rejects path traversal attempts."""
     with pytest.raises(ValueError, match="Invalid hostname"):
-        app.get_diff_file_path("../etc", "show version")
+        storage.get_diff_file_path("../etc", "show version")
     with pytest.raises(ValueError, match="Invalid command"):
-        app.get_diff_file_path("router1", "../etc/passwd")
+        storage.get_diff_file_path("router1", "../etc/passwd")
 
 
 def test_compare_files_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> None:
@@ -642,7 +643,7 @@ def test_compare_files_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> 
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         response = client.post(
@@ -666,7 +667,7 @@ def test_compare_files_rejects_invalid_command(tmp_path: Path, monkeypatch) -> N
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         response = client.post(
@@ -690,7 +691,7 @@ def test_compare_files_rejects_invalid_base(tmp_path: Path, monkeypatch) -> None
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         response = client.post(
@@ -714,7 +715,7 @@ def test_capture_endpoint_rejects_invalid_hostname(tmp_path: Path, monkeypatch) 
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         # Test with hostname containing semicolon (invalid character)
@@ -730,7 +731,7 @@ def test_capture_endpoint_rejects_invalid_base(tmp_path: Path, monkeypatch) -> N
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         # Test with invalid base directory name
@@ -746,7 +747,7 @@ def test_host_detail_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> No
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         # Test with hostname containing invalid character
@@ -762,7 +763,7 @@ def test_export_diff_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> No
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         # Test with hostname containing invalid character
@@ -778,7 +779,7 @@ def test_export_json_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> No
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     with app.app.test_client() as client:
         # Test with hostname containing invalid character
@@ -797,7 +798,7 @@ def test_generate_side_by_side_html_escapes_script_tags() -> None:
     malicious_origin = "Safe content\n"
     malicious_dest = "Safe content\n<script>alert(1)</script>\n"
 
-    html_output = app.generate_side_by_side_html(malicious_origin, malicious_dest)
+    html_output = diff.generate_side_by_side_html(malicious_origin, malicious_dest)
 
     # Script tags should be escaped
     assert "&lt;script&gt;" in html_output
@@ -811,7 +812,7 @@ def test_generate_side_by_side_html_escapes_html_entities() -> None:
     origin = "Normal text"
     dest = '<img src=x onerror="alert(1)">'
 
-    html_output = app.generate_side_by_side_html(origin, dest)
+    html_output = diff.generate_side_by_side_html(origin, dest)
 
     # HTML should be escaped
     assert "&lt;img" in html_output
@@ -824,7 +825,7 @@ def test_generate_side_by_side_html_escapes_common_text() -> None:
     """Test that common text is also escaped in side-by-side view."""
     malicious = "<script>alert('XSS')</script>"
 
-    html_output = app.generate_side_by_side_html(malicious, malicious)
+    html_output = diff.generate_side_by_side_html(malicious, malicious)
 
     # Even identical text should be escaped
     assert "&lt;script&gt;" in html_output
@@ -837,7 +838,7 @@ def test_compute_diff_inline_escapes_script_tags() -> None:
     origin = "Safe content"
     dest = "Safe content\n<script>alert(1)</script>"
 
-    status, diff_html = app.compute_diff(origin, dest, view="inline")
+    status, diff_html = diff.compute_diff(origin, dest, view="inline")
 
     assert status == "changes detected"
     # Script tags should be escaped
@@ -851,7 +852,7 @@ def test_compute_diff_identical_escapes_html() -> None:
     """Test that identical content with HTML is escaped in inline view."""
     content = "<script>alert('XSS')</script>\n<img src=x>"
 
-    status, diff_html = app.compute_diff(content, content, view="inline")
+    status, diff_html = diff.compute_diff(content, content, view="inline")
 
     assert status == "identical"
     # HTML should be escaped in the <pre> tag
@@ -867,7 +868,7 @@ def test_compute_diff_sidebyside_escapes_html() -> None:
     origin = "Normal\n<script>bad()</script>"
     dest = "Normal\n<script>bad()</script>"
 
-    status, diff_html = app.compute_diff(origin, dest, view="sidebyside")
+    status, diff_html = diff.compute_diff(origin, dest, view="sidebyside")
 
     assert status == "identical"
     # HTML should be escaped
@@ -882,7 +883,7 @@ def test_host_detail_response_escapes_xss(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     origin_dir = tmp_path / "origin"
     dest_dir = tmp_path / "dest"
@@ -890,9 +891,9 @@ def test_host_detail_response_escapes_xss(tmp_path: Path, monkeypatch) -> None:
     origin_dir.mkdir()
     dest_dir.mkdir()
     diff_dir.mkdir()
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
-    monkeypatch.setattr(app, "DEST_DIR", str(dest_dir))
-    monkeypatch.setattr(app, "DIFF_DIR", str(diff_dir))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(storage, "DEST_DIR", str(dest_dir))
+    monkeypatch.setattr(storage, "DIFF_DIR", str(diff_dir))
 
     # Create files with XSS payload
     origin_file = origin_dir / "router1-show_version.txt"
@@ -921,12 +922,12 @@ def test_compare_files_response_escapes_xss(tmp_path: Path, monkeypatch) -> None
         "router2,10.0.0.2,admin,22,cisco\n"
     )
     hosts_csv.write_text(csv_content, encoding="utf-8")
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
 
     origin_dir = tmp_path / "origin"
     origin_dir.mkdir()
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
-    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(storage, "DEST_DIR", str(tmp_path / "dest"))
 
     # Create files with XSS payload
     file1 = origin_dir / "router1-show_version.txt"
@@ -969,7 +970,7 @@ def test_capture_endpoint_requires_auth_missing_token(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -989,7 +990,7 @@ def test_capture_endpoint_requires_auth_invalid_token(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -1010,7 +1011,7 @@ def test_capture_endpoint_accepts_valid_token(tmp_path: Path, monkeypatch) -> No
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -1042,7 +1043,7 @@ def test_capture_all_endpoint_accepts_valid_token(tmp_path: Path, monkeypatch) -
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -1073,7 +1074,7 @@ def test_logs_view_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
     logs_dir.mkdir()
     log_file = logs_dir / "nw-diff.log"
     log_file.write_text("Test log line\n", encoding="utf-8")
-    monkeypatch.setattr(app, "LOGS_DIR", str(logs_dir))
+    monkeypatch.setattr(logging_config, "LOGS_DIR", str(logs_dir))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -1104,7 +1105,7 @@ def test_logs_api_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
     logs_dir.mkdir()
     log_file = logs_dir / "nw-diff.log"
     log_file.write_text("Test log line\n", encoding="utf-8")
-    monkeypatch.setattr(app, "LOGS_DIR", str(logs_dir))
+    monkeypatch.setattr(logging_config, "LOGS_DIR", str(logs_dir))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -1137,10 +1138,10 @@ def test_export_diff_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(tmp_path / "origin"))
-    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(tmp_path / "origin"))
+    monkeypatch.setattr(storage, "DEST_DIR", str(tmp_path / "dest"))
 
     with app.app.test_client() as client:
         response = client.get(
@@ -1171,10 +1172,10 @@ def test_export_json_accepts_valid_token(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(tmp_path / "origin"))
-    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(tmp_path / "origin"))
+    monkeypatch.setattr(storage, "DEST_DIR", str(tmp_path / "dest"))
 
     with app.app.test_client() as client:
         response = client.get(
@@ -1193,10 +1194,10 @@ def test_auth_no_token_configured_allows_access(tmp_path: Path, monkeypatch) -> 
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
-    monkeypatch.setattr(app, "ORIGIN_DIR", str(tmp_path / "origin"))
-    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(tmp_path / "origin"))
+    monkeypatch.setattr(storage, "DEST_DIR", str(tmp_path / "dest"))
 
     with app.app.test_client() as client:
         # /api/export should work without token when NW_DIFF_API_TOKEN is not set
@@ -1283,7 +1284,7 @@ def test_capture_endpoint_get_returns_405(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
 
     with app.app.test_client() as client:
@@ -1299,7 +1300,7 @@ def test_capture_endpoint_post_works(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
 
     with app.app.test_client() as client:
@@ -1316,7 +1317,7 @@ def test_capture_all_endpoint_get_returns_405(tmp_path: Path, monkeypatch) -> No
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
 
     with app.app.test_client() as client:
@@ -1332,7 +1333,7 @@ def test_capture_all_endpoint_post_works(tmp_path: Path, monkeypatch) -> None:
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
 
     with app.app.test_client() as client:
@@ -1349,7 +1350,7 @@ def test_capture_endpoint_post_with_auth_token(tmp_path: Path, monkeypatch) -> N
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -1371,7 +1372,7 @@ def test_capture_endpoint_get_with_auth_token_still_405(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -1391,7 +1392,7 @@ def test_capture_all_endpoint_post_with_auth_token(tmp_path: Path, monkeypatch) 
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
@@ -1413,7 +1414,7 @@ def test_capture_all_endpoint_get_with_auth_token_still_405(
         """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
         encoding="utf-8",
     )
-    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
 
     with app.app.test_client() as client:
