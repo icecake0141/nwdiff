@@ -149,6 +149,7 @@ def require_api_token(f):
         token = auth_header[7:]  # Remove "Bearer " prefix
 
         # Use constant-time comparison to prevent timing attacks
+        # hmac.compare_digest safely handles tokens of different lengths
         if not hmac.compare_digest(token, expected_token):
             logger.warning(
                 "Unauthorized access attempt to %s - invalid token",
