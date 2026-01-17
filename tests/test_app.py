@@ -360,6 +360,48 @@ def test_logging_configuration_creates_log_file() -> None:
     assert app.logger.level == app.logging.DEBUG
 
 
+def test_logger_handlers_not_duplicated_on_reimport() -> None:
+    """Test that logger handlers are not duplicated on module re-import."""
+    # Get the initial number of handlers
+    initial_handler_count = len(app.logger.handlers)
+
+    # Re-import the module (simulates WSGI reloading)
+    import importlib
+
+    importlib.reload(app)
+
+    # Check that handlers were not duplicated
+    assert len(app.logger.handlers) == initial_handler_count
+
+
+def test_create_backup_logs_warning_on_failure(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    """Test that create_backup logs a warning instead of using print() on failure."""
+    import logging
+
+    backup_dir = tmp_path / "backup"
+    backup_dir.mkdir()
+    monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
+
+    # Create a test file
+    test_file = tmp_path / "test.txt"
+    test_file.write_text("original content", encoding="utf-8")
+
+    # Make backup directory read-only to trigger an error
+    backup_dir.chmod(0o444)
+
+    # Call create_backup which should log a warning instead of printing
+    with caplog.at_level(logging.WARNING):
+        app.create_backup(str(test_file))
+
+    # Verify that a warning was logged
+    assert any("Failed to create backup" in record.message for record in caplog.records)
+
+    # Clean up: restore permissions
+    backup_dir.chmod(0o755)
+
+
 def test_logs_view_endpoint(tmp_path: Path, monkeypatch) -> None:
     """Test the /logs web UI endpoint."""
     # Create a test log file

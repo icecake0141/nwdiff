@@ -65,9 +65,10 @@ formatter = logging.Formatter(
 file_handler.setFormatter(formatter)
 console_handler.setFormatter(formatter)
 
-# Add handlers to logger
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+# Add handlers to logger (only if not already added to prevent duplicates)
+if not logger.handlers:
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
 
 logger.info("NW-Diff application starting")
 
@@ -280,7 +281,7 @@ def create_backup(filepath):
                 dst.write(content)
             rotate_backups(filepath)
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            print(f"Warning: Failed to create backup for {filepath}: {exc}")
+            logger.warning("Failed to create backup for %s: %s", filepath, exc)
 
 
 # --- Helper function to read CSV and skip comment lines ---
@@ -632,7 +633,7 @@ def capture(base, hostname):
         return redirect(url_for("host_list"))
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Failed to capture data from %s: %s", hostname, exc, exc_info=True)
-        return f"Failed to capture data: {exc}", 500
+        return "Failed to capture data from device", 500
 
 
 # --- New endpoint: Capture for all devices ---
@@ -1207,7 +1208,7 @@ def logs_api():
 
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Error reading log file for API: %s", exc)
-        return jsonify({"error": f"Error reading log file: {exc}", "logs": []}), 500
+        return jsonify({"error": "Error reading log file", "logs": []}), 500
 
     return jsonify(
         {
