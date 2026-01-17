@@ -37,10 +37,10 @@ jobs:
         run: pip-audit -r requirements.txt -r requirements-dev.txt
 
       - name: Format check (Black)
-        run: black --check app.py tests
+        run: black --check app.py tests nw_diff
 
       - name: Lint (Pylint)
-        run: pylint app.py tests
+        run: pylint app.py tests nw_diff
 
       - name: Static analysis (mypy)
         run: mypy tests
