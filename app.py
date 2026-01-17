@@ -731,17 +731,20 @@ def export_diff(hostname):
     if not device_info:
         return "Host not found", 404
 
-    # Sanitize hostname for use in filename - remove any characters that could cause path traversal
+    # Sanitize hostname for filename - prevent path traversal
     safe_hostname = re.sub(r"[^\w\-]", "_", hostname)
 
     # Generate HTML content
+    bootstrap_css = (
+        "https://stackpath.bootstrapcdn.com/" "bootstrap/4.5.2/css/bootstrap.min.css"
+    )
     html_parts = [
         "<!DOCTYPE html>",
         "<html lang='en'>",
         "<head>",
         "<meta charset='UTF-8'>",
         f"<title>Diff Export - {hostname}</title>",
-        "<link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css'>",
+        f"<link rel='stylesheet' href='{bootstrap_css}'>",
         "</head>",
         "<body>",
         "<div class='container mt-4'>",
@@ -766,9 +769,11 @@ def export_diff(hostname):
                 status, diff_html = compute_diff(origin_data, dest_data, "inline")
 
                 html_parts.append("<div class='card mb-3'>")
-                html_parts.append(
-                    f"<div class='card-header'><strong>Command:</strong> {command}</div>"
+                cmd_header = (
+                    f"<div class='card-header'>"
+                    f"<strong>Command:</strong> {command}</div>"
                 )
+                html_parts.append(cmd_header)
                 html_parts.append("<div class='card-body'>")
                 html_parts.append(
                     f"<p><strong>Origin Modified:</strong> {origin_mtime}</p>"
@@ -777,22 +782,30 @@ def export_diff(hostname):
                     f"<p><strong>Dest Modified:</strong> {dest_mtime}</p>"
                 )
                 if status == "changes detected":
-                    html_parts.append(
-                        f"<span style='background-color: #ffff99; font-weight:bold; padding: 5px; color:black;'>{status}</span>"
+                    status_span = (
+                        f"<span style='background-color: #ffff99; "
+                        f"font-weight:bold; padding: 5px; "
+                        f"color:black;'>{status}</span>"
                     )
+                    html_parts.append(status_span)
                 elif status == "identical":
-                    html_parts.append(
-                        f"<span style='background-color: #add8e6; font-weight:bold; padding: 5px; color:black;'>{status}</span>"
+                    status_span = (
+                        f"<span style='background-color: #add8e6; "
+                        f"font-weight:bold; padding: 5px; "
+                        f"color:black;'>{status}</span>"
                     )
+                    html_parts.append(status_span)
                 else:
                     html_parts.append(f"<span class='badge badge-info'>{status}</span>")
                 html_parts.append(f"<div class='mt-3'>{diff_html}</div>")
                 html_parts.append("</div></div>")
             except (IOError, OSError) as exc:  # pylint: disable=broad-exception-caught
                 html_parts.append("<div class='card mb-3'>")
-                html_parts.append(
-                    f"<div class='card-header'><strong>Command:</strong> {command}</div>"
+                cmd_header = (
+                    f"<div class='card-header'>"
+                    f"<strong>Command:</strong> {command}</div>"
                 )
+                html_parts.append(cmd_header)
                 html_parts.append("<div class='card-body'>")
                 html_parts.append(
                     f"<p class='text-danger'>Error reading files: {exc}</p>"
@@ -800,9 +813,11 @@ def export_diff(hostname):
                 html_parts.append("</div></div>")
         else:
             html_parts.append("<div class='card mb-3'>")
-            html_parts.append(
-                f"<div class='card-header'><strong>Command:</strong> {command}</div>"
+            cmd_header = (
+                f"<div class='card-header'>"
+                f"<strong>Command:</strong> {command}</div>"
             )
+            html_parts.append(cmd_header)
             html_parts.append("<div class='card-body'>")
             html_parts.append(
                 "<p class='text-danger'>Files not found for this command</p>"
