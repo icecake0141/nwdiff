@@ -256,10 +256,10 @@ def compute_diff(origin_data, dest_data, view="inline"):
     """
     Computes diff information using diff_match_patch.
     For inline view:
-      - If a line contains any diff tags, the entire line is highlighted
-        with a yellow background.
-      - Additionally, text within <del> tags gets a red background and
-        text within <ins> tags gets a blue background.
+      - If a line contains any diff tags, the entire line is
+        highlighted with a yellow background.
+      - Additionally, text within <del> tags gets a red background
+        and text within <ins> tags gets a blue background.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
@@ -708,6 +708,65 @@ def compare_files():
         diff_html=diff_html,
         status=status,
     )
+
+
+# --- JSON Export API endpoint ---
+@app.route("/api/export/<hostname>")
+def export_json(hostname):
+    """
+    JSON export endpoint that returns all command results, timestamps, and diff status
+    for the specified hostname. Validates hostname to prevent security issues.
+    """
+    # Validate hostname exists in CSV
+    device_info = get_device_info(hostname)
+    if not device_info:
+        return (
+            jsonify({"error": "Hostname not found in hosts configuration"}),
+            404,
+        )
+
+    commands = get_commands_for_host(hostname)
+    export_data = {
+        "hostname": hostname,
+        "ip": device_info["ip"],
+        "model": device_info.get("model", ""),
+        "commands": [],
+    }
+
+    for command in commands:
+        origin_path = get_file_path(hostname, command, "origin")
+        dest_path = get_file_path(hostname, command, "dest")
+
+        command_data = {
+            "command": command,
+            "origin": {
+                "timestamp": get_file_mtime(origin_path),
+                "exists": os.path.exists(origin_path),
+            },
+            "dest": {
+                "timestamp": get_file_mtime(dest_path),
+                "exists": os.path.exists(dest_path),
+            },
+        }
+
+        # Compute diff status if both files exist
+        if os.path.exists(origin_path) and os.path.exists(dest_path):
+            try:
+                with open(origin_path, encoding="utf-8") as f:
+                    origin_data = f.read()
+                with open(dest_path, encoding="utf-8") as f:
+                    dest_data = f.read()
+                command_data["diff_status"] = compute_diff_status(
+                    origin_data, dest_data
+                )
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                command_data["diff_status"] = f"error reading files: {exc}"
+        else:
+            command_data["diff_status"] = "file not found"
+
+        export_data["commands"].append(command_data)
+
+    return jsonify(export_data)
 
 
 # --- Logs Web UI ---

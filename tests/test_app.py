@@ -201,6 +201,153 @@ def test_rotate_backups_keeps_last_10(tmp_path: Path, monkeypatch) -> None:
     remaining_names = sorted([f.name for f in backup_files])
     for i in range(5, 15):
         assert f"backup_{i:02d}_test.txt" in remaining_names
+def test_export_json_returns_404_for_missing_hostname(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Return 404 error when hostname is not found in CSV."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    with app.app.test_client() as client:
+        response = client.get("/api/export/nonexistent")
+
+    assert response.status_code == 404
+    assert response.json is not None
+    assert response.json["error"] == "Hostname not found in hosts configuration"
+
+
+def test_export_json_returns_valid_structure(tmp_path: Path, monkeypatch) -> None:
+    """Return valid JSON structure with hostname, IP, model, and commands."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(tmp_path / "origin"))
+    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+
+    with app.app.test_client() as client:
+        response = client.get("/api/export/router1")
+
+    assert response.status_code == 200
+    data = response.json
+    assert data is not None
+    assert data["hostname"] == "router1"
+    assert data["ip"] == "10.0.0.1"
+    assert data["model"] == "cisco"
+    assert "commands" in data
+    assert isinstance(data["commands"], list)
+
+
+def test_export_json_includes_command_data(tmp_path: Path, monkeypatch) -> None:
+    """Return command data with timestamps and diff status."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    origin_dir = tmp_path / "origin"
+    dest_dir = tmp_path / "dest"
+    origin_dir.mkdir()
+    dest_dir.mkdir()
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(app, "DEST_DIR", str(dest_dir))
+
+    # Create test files for one command
+    origin_file = origin_dir / "router1-show_version.txt"
+    dest_file = dest_dir / "router1-show_version.txt"
+    origin_file.write_text("Version 1.0", encoding="utf-8")
+    dest_file.write_text("Version 1.0", encoding="utf-8")
+
+    with app.app.test_client() as client:
+        response = client.get("/api/export/router1")
+
+    assert response.status_code == 200
+    data = response.json
+    assert data is not None
+    assert len(data["commands"]) > 0
+
+    # Check first command structure
+    cmd = data["commands"][0]
+    assert "command" in cmd
+    assert "origin" in cmd
+    assert "dest" in cmd
+    assert "diff_status" in cmd
+    assert "timestamp" in cmd["origin"]
+    assert "exists" in cmd["origin"]
+    assert "timestamp" in cmd["dest"]
+    assert "exists" in cmd["dest"]
+
+
+def test_export_json_detects_identical_files(tmp_path: Path, monkeypatch) -> None:
+    """Return identical diff status when origin and dest files match."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    origin_dir = tmp_path / "origin"
+    dest_dir = tmp_path / "dest"
+    origin_dir.mkdir()
+    dest_dir.mkdir()
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(app, "DEST_DIR", str(dest_dir))
+
+    # Create identical test files
+    origin_file = origin_dir / "router1-show_version.txt"
+    dest_file = dest_dir / "router1-show_version.txt"
+    origin_file.write_text("Same content", encoding="utf-8")
+    dest_file.write_text("Same content", encoding="utf-8")
+
+    with app.app.test_client() as client:
+        response = client.get("/api/export/router1")
+
+    assert response.status_code == 200
+    data = response.json
+    assert data is not None
+    cmd = data["commands"][0]
+    assert cmd["diff_status"] == "identical"
+
+
+def test_export_json_detects_changes(tmp_path: Path, monkeypatch) -> None:
+    """Return changes detected status when origin and dest files differ."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    origin_dir = tmp_path / "origin"
+    dest_dir = tmp_path / "dest"
+    origin_dir.mkdir()
+    dest_dir.mkdir()
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(app, "DEST_DIR", str(dest_dir))
+
+    # Create different test files
+    origin_file = origin_dir / "router1-show_version.txt"
+    dest_file = dest_dir / "router1-show_version.txt"
+    origin_file.write_text("Version 1.0", encoding="utf-8")
+    dest_file.write_text("Version 2.0", encoding="utf-8")
+
+    with app.app.test_client() as client:
+        response = client.get("/api/export/router1")
+
+    assert response.status_code == 200
+    data = response.json
+    assert data is not None
+    cmd = data["commands"][0]
+    assert cmd["diff_status"] == "changes detected"
 
 
 def test_logging_configuration_creates_log_file() -> None:
