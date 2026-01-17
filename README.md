@@ -1,6 +1,6 @@
-# Nwdiff Project
+# NW-Diff Project
 
-Nwdiff is a Flask-based web application designed to retrieve, compare, and display configuration or status data collected from network devices. It leverages Netmiko to connect to devices and capture data defined in a CSV file. Using diff-match-patch, the application computes differences between two sets of data and presents the results in both inline and side-by-side views. Diff HTML files are generated and stored in a dedicated "diff" directory for subsequent review.
+NW-Diff is a Flask-based web application designed to retrieve, compare, and display configuration or status data collected from network devices. It leverages Netmiko to connect to devices and capture data defined in a CSV file. Using diff-match-patch, the application computes differences between two sets of data and presents the results in both inline and side-by-side views. Diff HTML files are generated and stored in a dedicated "diff" directory for subsequent review.
 
 ## Features
 
@@ -13,6 +13,15 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
   - `/capture/dest/<hostname>`: Captures the latest (or destination) data.
 
   The captured outputs are stored in the `origin` and `dest` directories, respectively.
+
+- **Configuration Backup:**
+  Automatic backup creation before overwriting files to preserve historical configurations and prevent data loss:
+  - Backups are created automatically before any file is overwritten during capture operations
+  - The rotation system keeps the last 10 backups per file
+  - Backups are stored in the `backup/` directory with timestamps
+  - Filename format: `YYYYMMDD_HHMMSS_hostname-command.txt`
+  - Provides protection against accidental overwrites and enables historical configuration tracking
+  - Allows recovery of older configurations if needed
 
 - **Difference Computation:**
   The application compares corresponding files from the `origin` and `dest` directories using diff-match-patch:
@@ -28,11 +37,11 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/nwdiff.git
+   git clone https://github.com/yourusername/nw-diff.git
    ```
 2. **Navigate to the project directory:**
    ```bash
-   cd /workspaces/nwdiff
+   cd /workspaces/nw-diff
    ```
 
 3. **Install dependencies:**

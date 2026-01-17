@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Copyright 2025 Nwdiff Contributors
+Copyright 2025 NW-Diff Contributors
 SPDX-License-Identifier: Apache-2.0
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,11 +39,11 @@ LOGS_DIR = "logs"
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 # Create logger
-logger = logging.getLogger("nwdiff")
+logger = logging.getLogger("nw-diff")
 logger.setLevel(logging.DEBUG)
 
 # Create rotating file handler (10MB max, keep 5 backup files)
-log_file = os.path.join(LOGS_DIR, "nwdiff.log")
+log_file = os.path.join(LOGS_DIR, "nw-diff.log")
 file_handler = logging.handlers.RotatingFileHandler(
     log_file, maxBytes=10 * 1024 * 1024, backupCount=5
 )
@@ -65,12 +65,13 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
-logger.info("Nwdiff application starting")
+logger.info("NW-Diff application starting")
 
 # Directories and CSV file settings
 ORIGIN_DIR = "origin"
 DEST_DIR = "dest"  # Changed from "dear" to "dest"
 DIFF_DIR = "diff"  # Directory to store diff HTML files
+BACKUP_DIR = "backup"  # Directory to store backup files
 HOSTS_CSV = "hosts.csv"
 
 # Device model specific command lists
@@ -98,6 +99,63 @@ DEFAULT_COMMANDS = ("show version",)
 os.makedirs(ORIGIN_DIR, exist_ok=True)
 os.makedirs(DEST_DIR, exist_ok=True)
 os.makedirs(DIFF_DIR, exist_ok=True)
+os.makedirs(BACKUP_DIR, exist_ok=True)
+
+
+# --- Backup helper functions ---
+def get_backup_filename(filepath):
+    """
+    Generates a backup filename with timestamp.
+    Format: YYYYMMDD_HHMMSS_hostname-command.txt
+    """
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = os.path.basename(filepath)
+    return os.path.join(BACKUP_DIR, f"{timestamp}_{filename}")
+
+
+def rotate_backups(filepath):
+    """
+    Keeps only the last 10 backups for a given file.
+    Deletes older backups beyond the 10 most recent.
+    """
+    if not os.path.exists(BACKUP_DIR):
+        return
+
+    filename = os.path.basename(filepath)
+    # Find all backups for this file
+    backup_files = []
+    for backup_file in os.listdir(BACKUP_DIR):
+        if backup_file.endswith(f"_{filename}"):
+            backup_path = os.path.join(BACKUP_DIR, backup_file)
+            backup_files.append((backup_path, os.path.getmtime(backup_path)))
+
+    # Sort by modification time (newest first)
+    backup_files.sort(key=lambda x: x[1], reverse=True)
+
+    # Keep only the 10 most recent, delete the rest
+    for backup_path, _ in backup_files[10:]:
+        try:
+            os.remove(backup_path)
+        except OSError:
+            pass
+
+
+def create_backup(filepath):
+    """
+    Creates a backup of the file before it is overwritten.
+    Only creates backup if the file exists.
+    After backup creation, rotates backups to keep only the last 10.
+    """
+    if os.path.exists(filepath):
+        backup_path = get_backup_filename(filepath)
+        try:
+            with open(filepath, "r", encoding="utf-8") as src:
+                content = src.read()
+            with open(backup_path, "w", encoding="utf-8") as dst:
+                dst.write(content)
+            rotate_backups(filepath)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            print(f"Warning: Failed to create backup for {filepath}: {exc}")
 
 
 # --- Helper function to read CSV and skip comment lines ---
@@ -257,11 +315,12 @@ def compute_diff(origin_data, dest_data, view="inline"):
 def generate_side_by_side_html(origin_data, dest_data):
     """
     Generates side-by-side HTML displaying the origin content
-    (common parts plus deletions) on the left and the destination content
-    (common parts plus insertions) on the right.
+    (common parts plus deletions) on the left and the destination
+    content (common parts plus insertions) on the right.
     For each column:
       - At the character level, text in <del> tags is highlighted
-        with a red background and text in <ins> tags with a blue background.
+        with a red background and text in <ins> tags with a blue
+        background.
       - At the line level, any line containing diff tags is wrapped
         with a yellow background.
     """
@@ -310,6 +369,17 @@ def generate_side_by_side_html(origin_data, dest_data):
             new_dest_lines.append(line)
     dest_html = "<br>".join(new_dest_lines)
 
+    html = (
+        '<table class="table table-bordered" '
+        'style="width:100%; border-collapse: collapse;">\n'
+        "  <tr>\n"
+        f'    <td style="vertical-align: top; width:50%; '
+        f'white-space: pre-wrap;">{origin_html}</td>\n'
+        f'    <td style="vertical-align: top; width:50%; '
+        f'white-space: pre-wrap;">{dest_html}</td>\n'
+        "  </tr>\n"
+        "</table>"
+    )
     # Build the side-by-side table HTML
     table_class = "table table-bordered"
     table_style = "width:100%; border-collapse: collapse;"
@@ -327,12 +397,11 @@ def generate_side_by_side_html(origin_data, dest_data):
 @app.route("/capture/<base>/<hostname>")
 def capture(base, hostname):
     """
-    Triggered when clicking the "Capture Origin" or "Capture Dest" button
-    on the host list page.
+    Triggered when clicking the "Capture Origin" or "Capture Dest"
+    button on the host list page.
     Establishes a single connection to the target device and retrieves
-    output for each command (based on the device's model)
-    before disconnecting.
-    CSV reading ignores comment lines.
+    output for each command (based on the device's model) before
+    disconnecting. CSV reading ignores comment lines.
     """
     logger.info("Capture request received for host=%s, base=%s", hostname, base)
 
@@ -371,6 +440,7 @@ def capture(base, hostname):
             logger.debug("Executing command on %s: %s", hostname, command)
             output = connection.send_command(command)
             filepath = get_file_path(hostname, command, base)
+            create_backup(filepath)
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(output)
             logger.debug("Saved output for %s to: %s", command, filepath)
@@ -439,6 +509,7 @@ def capture_all(base):
                 logger.debug("Executing command on %s: %s", hostname, command)
                 output = connection.send_command(command)
                 filepath = get_file_path(hostname, command, base)
+                create_backup(filepath)
                 with open(filepath, "w", encoding="utf-8") as f:
                     f.write(output)
                 logger.debug("Saved output for %s to: %s", command, filepath)
@@ -837,7 +908,7 @@ def logs_view():
     """
     logger.debug("Logs view page requested")
     # Read the last 1000 lines from the log file
-    log_file_path = os.path.join(LOGS_DIR, "nwdiff.log")
+    log_file_path = os.path.join(LOGS_DIR, "nw-diff.log")
     lines = []
     try:
         if os.path.exists(log_file_path):
@@ -877,7 +948,7 @@ def logs_api():
 
     tail = request.args.get("tail", "true").lower() == "true"
 
-    log_file_path = os.path.join(LOGS_DIR, "nwdiff.log")
+    log_file_path = os.path.join(LOGS_DIR, "nw-diff.log")
     log_entries = []
 
     try:

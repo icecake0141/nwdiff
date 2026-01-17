@@ -1,5 +1,5 @@
 """
-Copyright 2025 Nwdiff Contributors
+Copyright 2025 NW-Diff Contributors
 SPDX-License-Identifier: Apache-2.0
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +14,10 @@ Review required for correctness, security, and licensing.
 
 from __future__ import annotations
 
+import os
+import re
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -28,13 +31,13 @@ import app  # pylint: disable=wrong-import-position,import-error
 def test_read_hosts_csv_skips_comments(tmp_path: Path, monkeypatch) -> None:
     """Ensure comment lines are skipped while parsing the hosts CSV."""
     hosts_csv = tmp_path / "hosts.csv"
-    content = (
+    csv_content = (
         "# comment line\n"
         "host,ip,username,port,model\n"
         "router1,10.0.0.1,admin,22,cisco\n"
         "router2,10.0.0.2,admin,22,fortinet\n"
     )
-    hosts_csv.write_text(content, encoding="utf-8")
+    hosts_csv.write_text(csv_content, encoding="utf-8")
     monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
 
     rows = app.read_hosts_csv()
@@ -120,6 +123,84 @@ def test_generate_side_by_side_html_includes_highlights() -> None:
     assert "<del" in html
     assert "<ins" in html
     assert "background-color: #ffff99" in html
+
+
+def test_get_backup_filename_format(tmp_path: Path, monkeypatch) -> None:
+    """Ensure backup filename follows the correct format."""
+    monkeypatch.setattr(app, "BACKUP_DIR", str(tmp_path / "backup"))
+    filepath = "/home/runner/work/nwdiff/nwdiff/origin/router1-show_version.txt"
+
+    backup_filename = app.get_backup_filename(filepath)
+
+    # Check that backup filename includes timestamp and original filename
+    assert "router1-show_version.txt" in backup_filename
+    assert str(tmp_path / "backup") in backup_filename
+    # Verify timestamp format YYYYMMDD_HHMMSS
+    pattern = r"\d{8}_\d{6}_router1-show_version\.txt"
+    assert re.search(pattern, backup_filename)
+
+
+def test_create_backup_when_file_exists(tmp_path: Path, monkeypatch) -> None:
+    """Backup should be created when file exists."""
+    backup_dir = tmp_path / "backup"
+    backup_dir.mkdir()
+    monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
+
+    # Create a test file
+    test_file = tmp_path / "test.txt"
+    test_file.write_text("original content", encoding="utf-8")
+
+    app.create_backup(str(test_file))
+
+    # Check that backup was created
+    backup_files = list(backup_dir.glob("*_test.txt"))
+    assert len(backup_files) == 1
+    assert backup_files[0].read_text(encoding="utf-8") == "original content"
+
+
+def test_create_backup_when_file_does_not_exist(tmp_path: Path, monkeypatch) -> None:
+    """No backup should be created when file does not exist."""
+    backup_dir = tmp_path / "backup"
+    backup_dir.mkdir()
+    monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
+
+    # Try to backup a non-existent file
+    test_file = tmp_path / "nonexistent.txt"
+
+    app.create_backup(str(test_file))
+
+    # Check that no backup was created
+    backup_files = list(backup_dir.glob("*_nonexistent.txt"))
+    assert len(backup_files) == 0
+
+
+def test_rotate_backups_keeps_last_10(tmp_path: Path, monkeypatch) -> None:
+    """Rotation should keep only the last 10 backups."""
+    backup_dir = tmp_path / "backup"
+    backup_dir.mkdir()
+    monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
+
+    test_file = tmp_path / "test.txt"
+    test_file.write_text("content", encoding="utf-8")
+
+    # Create 15 backups with different timestamps
+    for i in range(15):
+        backup_path = backup_dir / f"backup_{i:02d}_test.txt"
+        backup_path.write_text(f"content {i}", encoding="utf-8")
+        # Set modification time to ensure proper ordering
+        mtime = time.time() - (15 - i)
+        os.utime(str(backup_path), (mtime, mtime))
+
+    app.rotate_backups(str(test_file))
+
+    # Check that only 10 backups remain
+    backup_files = list(backup_dir.glob("*_test.txt"))
+    assert len(backup_files) == 10
+
+    # Verify that the oldest ones were deleted
+    remaining_names = sorted([f.name for f in backup_files])
+    for i in range(5, 15):
+        assert f"backup_{i:02d}_test.txt" in remaining_names
 
 
 def test_export_json_returns_404_for_missing_hostname(
@@ -275,7 +356,7 @@ def test_logging_configuration_creates_log_file() -> None:
     """Test that logging is properly configured and creates log files."""
     # Import logger from app to verify it exists
     assert app.logger is not None
-    assert app.logger.name == "nwdiff"
+    assert app.logger.name == "nw-diff"
     assert app.logger.level == app.logging.DEBUG
 
 
@@ -284,10 +365,10 @@ def test_logs_view_endpoint(tmp_path: Path, monkeypatch) -> None:
     # Create a test log file
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()
-    log_file = logs_dir / "nwdiff.log"
+    log_file = logs_dir / "nw-diff.log"
     log_file.write_text(
-        "2025-01-16 12:00:00 - nwdiff - INFO - Test log line 1\n"
-        "2025-01-16 12:00:01 - nwdiff - ERROR - Test error line\n",
+        "2025-01-16 12:00:00 - nw-diff - INFO - Test log line 1\n"
+        "2025-01-16 12:00:01 - nw-diff - ERROR - Test error line\n",
         encoding="utf-8",
     )
 
@@ -306,11 +387,11 @@ def test_logs_api_endpoint(tmp_path: Path, monkeypatch) -> None:
     # Create a test log file
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()
-    log_file = logs_dir / "nwdiff.log"
+    log_file = logs_dir / "nw-diff.log"
     log_file.write_text(
-        "2025-01-16 12:00:00 - nwdiff - INFO - Test info log\n"
-        "2025-01-16 12:00:01 - nwdiff - ERROR - Test error log\n"
-        "2025-01-16 12:00:02 - nwdiff - DEBUG - Test debug log\n",
+        "2025-01-16 12:00:00 - nw-diff - INFO - Test info log\n"
+        "2025-01-16 12:00:01 - nw-diff - ERROR - Test error log\n"
+        "2025-01-16 12:00:02 - nw-diff - DEBUG - Test debug log\n",
         encoding="utf-8",
     )
 
