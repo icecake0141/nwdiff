@@ -16,6 +16,10 @@ import csv
 import logging
 import os
 
+# Read HOSTS_CSV path from environment variable at module load time.
+# This is intentional - the path is expected to be configured once at application
+# startup and not changed during runtime. For testing with different paths,
+# use monkeypatch to set the HOSTS_CSV attribute directly or reload the module.
 HOSTS_CSV = os.environ.get("HOSTS_CSV", "hosts.csv")
 
 logger = logging.getLogger("nw-diff")
