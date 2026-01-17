@@ -21,4 +21,5 @@ disable=
     too-many-locals,
     too-many-arguments,
     too-many-branches,
-    too-many-statements
+    too-many-statements,
+    too-many-lines

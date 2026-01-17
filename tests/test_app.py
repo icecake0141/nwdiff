@@ -437,7 +437,7 @@ def test_debug_mode_disabled_by_default(monkeypatch) -> None:
     monkeypatch.delenv("APP_DEBUG", raising=False)
 
     # The debug mode should be False when APP_DEBUG is not set
-    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in ("true", "1", "yes")
+    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in {"true", "1", "yes"}
     assert debug_mode is False
 
 
@@ -445,20 +445,20 @@ def test_debug_mode_enabled_with_env_var(monkeypatch) -> None:
     """Test that Flask debug mode can be enabled via APP_DEBUG environment variable."""
     # Test with "true"
     monkeypatch.setenv("APP_DEBUG", "true")
-    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in ("true", "1", "yes")
+    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in {"true", "1", "yes"}
     assert debug_mode is True
 
     # Test with "1"
     monkeypatch.setenv("APP_DEBUG", "1")
-    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in ("true", "1", "yes")
+    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in {"true", "1", "yes"}
     assert debug_mode is True
 
     # Test with "yes"
     monkeypatch.setenv("APP_DEBUG", "yes")
-    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in ("true", "1", "yes")
+    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in {"true", "1", "yes"}
     assert debug_mode is True
 
     # Test with "false"
     monkeypatch.setenv("APP_DEBUG", "false")
-    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in ("true", "1", "yes")
+    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in {"true", "1", "yes"}
     assert debug_mode is False
