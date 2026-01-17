@@ -4,24 +4,24 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
 
 ## Features
 
-- **Device Configuration:**  
+- **Device Configuration:**
   Device details (hostname, IP address, SSH port, username, and device model) are maintained in a CSV file (`hosts.csv`).
 
-- **Data Capture:**  
+- **Data Capture:**
   Two endpoints capture data from each device:
   - `/capture/origin/<hostname>`: Captures the initial (or original) data.
   - `/capture/dest/<hostname>`: Captures the latest (or destination) data.
-  
+
   The captured outputs are stored in the `origin` and `dest` directories, respectively.
 
-- **Difference Computation:**  
+- **Difference Computation:**
   The application compares corresponding files from the `origin` and `dest` directories using diff-match-patch:
   - **Inline View:** Presents the standard diff output.
   - **Side-by-Side View:** Displays the origin data on the left and the computed differences on the right.
-  
+
   Diff results are converted into HTML files and saved in the `diff` directory.
 
-- **Detailed Device View:**  
+- **Detailed Device View:**
   Access detailed information for each device through the `/host/<hostname>` endpoint.
 
 ## Installation
@@ -35,14 +35,14 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
    cd /workspaces/nwdiff
    ```
 
-3. **Install dependencies:**  
+3. **Install dependencies:**
    Ensure you have Python installed, then install the required packages:
    ```bash
    pip install -r requirements.txt
    ```
    Required packages include Flask, Netmiko, and diff-match-patch.
 
-4. **Configure Environment Variables:**  
+4. **Configure Environment Variables:**
    Set the `DEVICE_PASSWORD` environment variable to provide the password needed for device connections:
    ```bash
    export DEVICE_PASSWORD=your_device_password
@@ -54,17 +54,17 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
    ```bash
    python app.py
    ```
-2. **Access the Application:**  
+2. **Access the Application:**
    Open your browser and navigate to [http://localhost:5000](http://localhost:5000).
 
 3. **Interact with Endpoints:**
    - **Capture Data:**
      - For origin data: `/capture/origin/<hostname>`
      - For destination data: `/capture/dest/<hostname>`
-   - **View Detailed Device Info:**  
+   - **View Detailed Device Info:**
      `/host/<hostname>`
 
-4. **Review Diff Results:**  
+4. **Review Diff Results:**
    The computed diff HTML files are stored in the `diff` directory for offline viewing.
 
 ## Development
