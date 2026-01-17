@@ -15,6 +15,7 @@ Review required for correctness, security, and licensing.
 
 import csv
 import datetime
+import html as html_lib
 import logging
 import logging.handlers
 import os
@@ -393,7 +394,8 @@ def compute_diff(origin_data, dest_data, view="inline"):
         if view == "sidebyside":
             diff_html = generate_side_by_side_html(origin_data, dest_data)
         else:
-            diff_html = f"<pre>{origin_data}</pre>"
+            # Escape HTML to prevent XSS
+            diff_html = f"<pre>{html_lib.escape(origin_data)}</pre>"
     else:
         status = "changes detected"
         if view == "sidebyside":
@@ -437,6 +439,7 @@ def generate_side_by_side_html(origin_data, dest_data):
         background.
       - At the line level, any line containing diff tags is wrapped
         with a yellow background.
+    All text is HTML-escaped to prevent XSS attacks.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
@@ -445,15 +448,21 @@ def generate_side_by_side_html(origin_data, dest_data):
     origin_parts = []
     dest_parts = []
     for op, text in diffs:
+        # Escape text to prevent XSS
+        escaped_text = html_lib.escape(text)
         if op == 0:
-            origin_parts.append(text)
-            dest_parts.append(text)
+            origin_parts.append(escaped_text)
+            dest_parts.append(escaped_text)
         elif op == -1:
             # Highlight deleted text with a red background
-            origin_parts.append(f"<del style='background-color: #ffcccc;'>{text}</del>")
+            origin_parts.append(
+                f"<del style='background-color: #ffcccc;'>{escaped_text}</del>"
+            )
         elif op == 1:
             # Highlight added text with a blue background
-            dest_parts.append(f"<ins style='background-color: #cce5ff;'>{text}</ins>")
+            dest_parts.append(
+                f"<ins style='background-color: #cce5ff;'>{escaped_text}</ins>"
+            )
     origin_html = "".join(origin_parts)
     dest_html = "".join(dest_parts)
 
