@@ -138,8 +138,8 @@
         form.addEventListener('submit', function(event) {
             const base = form.getAttribute('data-base');
             const baseLabel = base === 'origin' ? 'Origin' : 'Dest';
-            
-            const confirmMessage = 
+
+            const confirmMessage =
                 '⚠️ WARNING: Capture All Operation ⚠️\n\n' +
                 'You are about to capture data from ALL ' + totalDevices + ' device(s).\n\n' +
                 'This operation will:\n' +
@@ -148,7 +148,7 @@
                 '• May take several minutes to complete\n' +
                 '• Will overwrite existing ' + baseLabel + ' data\n\n' +
                 'Are you sure you want to continue?';
-            
+
             if (!confirm(confirmMessage)) {
                 event.preventDefault();
                 return false;

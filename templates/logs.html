@@ -79,7 +79,7 @@
     function refreshLogs() {
         const limit = document.getElementById('limitSelector').value;
         const level = document.getElementById('levelFilter').value;
-        
+
         let url = "{{ url_for('logs_api') }}?limit=" + limit;
         if (level) {
             url += "&level=" + level;
@@ -94,7 +94,7 @@
             })
             .catch(error => {
                 console.error('Error refreshing logs:', error);
-                document.getElementById('logContent').innerHTML = 
+                document.getElementById('logContent').innerHTML =
                     '<span style="color: red;">Error loading logs. Please try again.</span>';
             });
     }
@@ -104,7 +104,7 @@
         let filteredLines = allLogLines;
 
         if (searchTerm) {
-            filteredLines = allLogLines.filter(line => 
+            filteredLines = allLogLines.filter(line =>
                 line.toLowerCase().includes(searchTerm)
             );
         }
@@ -112,13 +112,13 @@
         const logDiv = document.getElementById('logContent');
         // Use textContent to safely set the content without HTML parsing
         logDiv.textContent = filteredLines.join('\n');
-        
+
         // Apply color coding
         colorCodeLogs(logDiv);
-        
+
         // Scroll to bottom
         logDiv.scrollTop = logDiv.scrollHeight;
-        
+
         // Update line count
         updateLineCount(filteredLines.length);
     }
@@ -128,10 +128,10 @@
         const text = logDiv.textContent;
         const lines = text.split('\n');
         logDiv.innerHTML = '';
-        
+
         lines.forEach(function(line) {
             const lineDiv = document.createElement('div');
-            
+
             // Check for log levels and apply styling
             if (line.includes('- ERROR -')) {
                 const parts = line.split('- ERROR -');
@@ -180,7 +180,7 @@
             } else {
                 lineDiv.textContent = line;
             }
-            
+
             logDiv.appendChild(lineDiv);
         });
     }
@@ -201,7 +201,7 @@
             btn.textContent = 'Auto-Refresh: ON';
             btn.classList.remove('btn-secondary');
             btn.classList.add('btn-success');
-            
+
             const interval = parseInt(document.getElementById('refreshInterval').value) * 1000;
             autoRefreshInterval = setInterval(refreshLogs, interval);
         } else {
@@ -238,10 +238,10 @@
     window.addEventListener('load', function() {
         const logDiv = document.getElementById('logContent');
         logDiv.scrollTop = logDiv.scrollHeight;
-        
+
         // Color-code log levels
         colorCodeLogs(logDiv);
-        
+
         // Store initial log lines
         allLogLines = logDiv.textContent.split('\n').filter(line => line.trim());
     });
