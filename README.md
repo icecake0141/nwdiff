@@ -14,7 +14,7 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
 
   The captured outputs are stored in the `origin` and `dest` directories, respectively.
 
-- **Configuration Backup:**  
+- **Configuration Backup:**
   Automatic backup creation before overwriting files to preserve historical configurations and prevent data loss:
   - Backups are created automatically before any file is overwritten during capture operations
   - The rotation system keeps the last 10 backups per file
@@ -23,7 +23,7 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
   - Provides protection against accidental overwrites and enables historical configuration tracking
   - Allows recovery of older configurations if needed
 
-- **Difference Computation:**  
+- **Difference Computation:**
   The application compares corresponding files from the `origin` and `dest` directories using diff-match-patch:
   - **Inline View:** Presents the standard diff output.
   - **Side-by-Side View:** Displays the origin data on the left and the computed differences on the right.
