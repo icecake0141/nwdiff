@@ -1181,6 +1181,38 @@ def test_auth_invalid_format_bearer_missing(monkeypatch) -> None:
     assert response.json["error"] == "Authentication required"
 
 
+def test_auth_empty_token_after_bearer(monkeypatch) -> None:
+    """Test that 'Bearer' without a token is rejected."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        # Send "Bearer" without actual token
+        response = client.get(
+            "/api/logs",
+            headers={"Authorization": "Bearer"},
+        )
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
+def test_auth_bearer_with_only_space(monkeypatch) -> None:
+    """Test that 'Bearer ' with only space is rejected."""
+    monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")
+
+    with app.app.test_client() as client:
+        # Send "Bearer " with space but no token
+        response = client.get(
+            "/api/logs",
+            headers={"Authorization": "Bearer "},
+        )
+
+    assert response.status_code == 401
+    assert response.json is not None
+    assert response.json["error"] == "Authentication required"
+
+
 def test_auth_does_not_leak_internal_details(monkeypatch) -> None:
     """Test that authentication errors do not leak sensitive information."""
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_secret_token")

@@ -15,6 +15,7 @@ Review required for correctness, security, and licensing.
 
 import csv
 import datetime
+import hmac
 import html as html_lib
 import logging
 import logging.handlers
@@ -135,8 +136,8 @@ def require_api_token(f):
             )
             return jsonify({"error": "Authentication required"}), 401
 
-        # Check for Bearer token format
-        if not auth_header.startswith("Bearer "):
+        # Check for Bearer token format and length
+        if not auth_header.startswith("Bearer ") or len(auth_header) <= 7:
             logger.warning(
                 "Unauthorized access attempt to %s - invalid Authorization format",
                 request.path
@@ -146,7 +147,16 @@ def require_api_token(f):
         # Extract and validate token
         token = auth_header[7:]  # Remove "Bearer " prefix
 
-        if token != expected_token:
+        # Validate token is not empty
+        if not token:
+            logger.warning(
+                "Unauthorized access attempt to %s - empty token",
+                request.path
+            )
+            return jsonify({"error": "Authentication required"}), 401
+
+        # Use constant-time comparison to prevent timing attacks
+        if not hmac.compare_digest(token, expected_token):
             logger.warning(
                 "Unauthorized access attempt to %s - invalid token",
                 request.path
