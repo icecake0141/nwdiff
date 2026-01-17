@@ -28,7 +28,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(PROJECT_ROOT))
 
 import app  # pylint: disable=wrong-import-position,import-error
-from nw_diff import auth, security, storage, diff, devices, logging_config
+from nw_diff import (  # pylint: disable=wrong-import-position
+    security,
+    storage,
+    diff,
+    devices,
+    logging_config,
+)
 
 
 def test_read_hosts_csv_skips_comments(tmp_path: Path, monkeypatch) -> None:
