@@ -532,7 +532,7 @@ def capture(base, hostname):
     device_info = get_device_info(hostname)
     if not device_info:
         logger.error("Could not find device info in CSV for host: %s", hostname)
-        return "Could not find device info in CSV for host: " + hostname, 404
+        return f"Could not find device info in CSV for host: {hostname}", 404
 
     device = {
         "device_type": device_info["model"],
