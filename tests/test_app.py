@@ -28,13 +28,6 @@ import app  # pylint: disable=wrong-import-position,import-error
 def test_read_hosts_csv_skips_comments(tmp_path: Path, monkeypatch) -> None:
     """Ensure comment lines are skipped while parsing the hosts CSV."""
     hosts_csv = tmp_path / "hosts.csv"
-    hosts_csv.write_text(
-        """# comment line
-host,ip,username,port,model
-router1,10.0.0.1,admin,22,cisco
-router2,10.0.0.2,admin,22,fortinet
-""",
-        encoding="utf-8",
     content = (
         "# comment line\n"
         "host,ip,username,port,model\n"
@@ -276,6 +269,8 @@ def test_export_json_detects_changes(tmp_path: Path, monkeypatch) -> None:
     assert data is not None
     cmd = data["commands"][0]
     assert cmd["diff_status"] == "changes detected"
+
+
 def test_logging_configuration_creates_log_file() -> None:
     """Test that logging is properly configured and creates log files."""
     # Import logger from app to verify it exists

@@ -696,6 +696,8 @@ def export_json(hostname):
         export_data["commands"].append(command_data)
 
     return jsonify(export_data)
+
+
 # --- Logs Web UI ---
 @app.route("/logs")
 def logs_view():
