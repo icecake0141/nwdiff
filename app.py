@@ -669,15 +669,84 @@ def export_diff(hostname):
         "<html lang='en'>",
         "<head>",
         "<meta charset='UTF-8'>",
-        "<title>Diff Export - {}</title>".format(hostname),
+        f"<title>Diff Export - {hostname}</title>",
         "<link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css'>",
         "</head>",
         "<body>",
         "<div class='container mt-4'>",
-        "<h1>Diff Export for Host: {}</h1>".format(hostname),
-        "<p><strong>IP Address:</strong> {}</p>".format(device_info["ip"]),
+        f"<h1>Diff Export for Host: {hostname}</h1>",
+        f"<p><strong>IP Address:</strong> {device_info['ip']}</p>",
         "<hr>",
     ]
+
+    for command in commands:
+        origin_path = get_file_path(hostname, command, "origin")
+        dest_path = get_file_path(hostname, command, "dest")
+
+        if os.path.exists(origin_path) and os.path.exists(dest_path):
+            try:
+                with open(origin_path, encoding="utf-8") as f:
+                    origin_data = f.read()
+                with open(dest_path, encoding="utf-8") as f:
+                    dest_data = f.read()
+
+                origin_mtime = get_file_mtime(origin_path)
+                dest_mtime = get_file_mtime(dest_path)
+                status, diff_html = compute_diff(origin_data, dest_data, "inline")
+
+                html_parts.append("<div class='card mb-3'>")
+                html_parts.append(
+                    f"<div class='card-header'><strong>Command:</strong> {command}</div>"
+                )
+                html_parts.append("<div class='card-body'>")
+                html_parts.append(
+                    f"<p><strong>Origin Modified:</strong> {origin_mtime}</p>"
+                )
+                html_parts.append(
+                    f"<p><strong>Dest Modified:</strong> {dest_mtime}</p>"
+                )
+                if status == "changes detected":
+                    html_parts.append(
+                        f"<span style='background-color: #ffff99; font-weight:bold; padding: 5px; color:black;'>{status}</span>"
+                    )
+                elif status == "identical":
+                    html_parts.append(
+                        f"<span style='background-color: #add8e6; font-weight:bold; padding: 5px; color:black;'>{status}</span>"
+                    )
+                else:
+                    html_parts.append(f"<span class='badge badge-info'>{status}</span>")
+                html_parts.append(f"<div class='mt-3'>{diff_html}</div>")
+                html_parts.append("</div></div>")
+            except (IOError, OSError) as exc:  # pylint: disable=broad-exception-caught
+                html_parts.append("<div class='card mb-3'>")
+                html_parts.append(
+                    f"<div class='card-header'><strong>Command:</strong> {command}</div>"
+                )
+                html_parts.append("<div class='card-body'>")
+                html_parts.append(
+                    f"<p class='text-danger'>Error reading files: {exc}</p>"
+                )
+                html_parts.append("</div></div>")
+        else:
+            html_parts.append("<div class='card mb-3'>")
+            html_parts.append(
+                f"<div class='card-header'><strong>Command:</strong> {command}</div>"
+            )
+            html_parts.append("<div class='card-body'>")
+            html_parts.append(
+                "<p class='text-danger'>Files not found for this command</p>"
+            )
+            html_parts.append("</div></div>")
+
+    html_parts.extend(["</div>", "</body>", "</html>"])
+    html_content = "\n".join(html_parts)
+
+    response = make_response(html_content)
+    response.headers["Content-Type"] = "text/html"
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename={safe_hostname}-diff-export.html"
+    )
+    return response
 
 
 # --- JSON Export API endpoint ---
