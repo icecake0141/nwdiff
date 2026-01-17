@@ -15,6 +15,7 @@ Review required for correctness, security, and licensing.
 
 import csv
 import datetime
+import html as html_lib
 import logging
 import logging.handlers
 import os
@@ -393,12 +394,15 @@ def compute_diff(origin_data, dest_data, view="inline"):
         if view == "sidebyside":
             diff_html = generate_side_by_side_html(origin_data, dest_data)
         else:
-            diff_html = f"<pre>{origin_data}</pre>"
+            # Escape HTML to prevent XSS
+            diff_html = f"<pre>{html_lib.escape(origin_data)}</pre>"
     else:
         status = "changes detected"
         if view == "sidebyside":
             diff_html = generate_side_by_side_html(origin_data, dest_data)
         else:
+            # Note: diff_prettyHtml automatically escapes HTML entities in the text
+            # This has been verified - it converts < to &lt;, > to &gt;, etc.
             raw_diff_html = dmp.diff_prettyHtml(diffs)
             # Replace ¶ and &para; with line breaks
             inline_html = raw_diff_html.replace("¶", "<br>").replace("&para;", "")
@@ -437,6 +441,7 @@ def generate_side_by_side_html(origin_data, dest_data):
         background.
       - At the line level, any line containing diff tags is wrapped
         with a yellow background.
+    All text is HTML-escaped to prevent XSS attacks.
     """
     dmp = diff_match_patch()
     diffs = dmp.diff_main(origin_data, dest_data)
@@ -445,15 +450,21 @@ def generate_side_by_side_html(origin_data, dest_data):
     origin_parts = []
     dest_parts = []
     for op, text in diffs:
+        # Escape text to prevent XSS
+        escaped_text = html_lib.escape(text)
         if op == 0:
-            origin_parts.append(text)
-            dest_parts.append(text)
+            origin_parts.append(escaped_text)
+            dest_parts.append(escaped_text)
         elif op == -1:
             # Highlight deleted text with a red background
-            origin_parts.append(f"<del style='background-color: #ffcccc;'>{text}</del>")
+            origin_parts.append(
+                f"<del style='background-color: #ffcccc;'>{escaped_text}</del>"
+            )
         elif op == 1:
             # Highlight added text with a blue background
-            dest_parts.append(f"<ins style='background-color: #cce5ff;'>{text}</ins>")
+            dest_parts.append(
+                f"<ins style='background-color: #cce5ff;'>{escaped_text}</ins>"
+            )
     origin_html = "".join(origin_parts)
     dest_html = "".join(dest_parts)
 
@@ -483,17 +494,6 @@ def generate_side_by_side_html(origin_data, dest_data):
             new_dest_lines.append(line)
     dest_html = "<br>".join(new_dest_lines)
 
-    html = (
-        '<table class="table table-bordered" '
-        'style="width:100%; border-collapse: collapse;">\n'
-        "  <tr>\n"
-        f'    <td style="vertical-align: top; width:50%; '
-        f'white-space: pre-wrap;">{origin_html}</td>\n'
-        f'    <td style="vertical-align: top; width:50%; '
-        f'white-space: pre-wrap;">{dest_html}</td>\n'
-        "  </tr>\n"
-        "</table>"
-    )
     # Build the side-by-side table HTML
     table_class = "table table-bordered"
     table_style = "width:100%; border-collapse: collapse;"

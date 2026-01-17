@@ -747,3 +747,171 @@ def test_export_json_rejects_invalid_hostname(tmp_path: Path, monkeypatch) -> No
         json_data = response.get_json()
         assert json_data is not None
         assert "Invalid hostname" in json_data["error"]
+
+
+# --- XSS Prevention Tests ---
+
+
+def test_generate_side_by_side_html_escapes_script_tags() -> None:
+    """Test that script tags in diff content are escaped in side-by-side view."""
+    malicious_origin = "Safe content\n"
+    malicious_dest = "Safe content\n<script>alert(1)</script>\n"
+
+    html_output = app.generate_side_by_side_html(malicious_origin, malicious_dest)
+
+    # Script tags should be escaped
+    assert "&lt;script&gt;" in html_output
+    assert "&lt;/script&gt;" in html_output
+    # Raw script tags should NOT be present
+    assert "<script>alert" not in html_output
+
+
+def test_generate_side_by_side_html_escapes_html_entities() -> None:
+    """Test that HTML entities are properly escaped in side-by-side view."""
+    origin = "Normal text"
+    dest = '<img src=x onerror="alert(1)">'
+
+    html_output = app.generate_side_by_side_html(origin, dest)
+
+    # HTML should be escaped
+    assert "&lt;img" in html_output
+    assert "&quot;" in html_output or "&#x27;" in html_output
+    # Raw HTML should NOT be present
+    assert "<img src=x onerror=" not in html_output
+
+
+def test_generate_side_by_side_html_escapes_common_text() -> None:
+    """Test that common text is also escaped in side-by-side view."""
+    malicious = "<script>alert('XSS')</script>"
+
+    html_output = app.generate_side_by_side_html(malicious, malicious)
+
+    # Even identical text should be escaped
+    assert "&lt;script&gt;" in html_output
+    assert "&lt;/script&gt;" in html_output
+    assert "<script>alert" not in html_output
+
+
+def test_compute_diff_inline_escapes_script_tags() -> None:
+    """Test that script tags are escaped in inline diff view."""
+    origin = "Safe content"
+    dest = "Safe content\n<script>alert(1)</script>"
+
+    status, diff_html = app.compute_diff(origin, dest, view="inline")
+
+    assert status == "changes detected"
+    # Script tags should be escaped
+    assert "&lt;script&gt;" in diff_html
+    assert "&lt;/script&gt;" in diff_html
+    # Raw script tags should NOT be present
+    assert "<script>alert" not in diff_html
+
+
+def test_compute_diff_identical_escapes_html() -> None:
+    """Test that identical content with HTML is escaped in inline view."""
+    content = "<script>alert('XSS')</script>\n<img src=x>"
+
+    status, diff_html = app.compute_diff(content, content, view="inline")
+
+    assert status == "identical"
+    # HTML should be escaped in the <pre> tag
+    assert "&lt;script&gt;" in diff_html
+    assert "&lt;img" in diff_html
+    # Raw HTML should NOT be present
+    assert "<script>alert" not in diff_html
+    assert "<img src=x>" not in diff_html
+
+
+def test_compute_diff_sidebyside_escapes_html() -> None:
+    """Test that HTML is escaped in side-by-side view via compute_diff."""
+    origin = "Normal\n<script>bad()</script>"
+    dest = "Normal\n<script>bad()</script>"
+
+    status, diff_html = app.compute_diff(origin, dest, view="sidebyside")
+
+    assert status == "identical"
+    # HTML should be escaped
+    assert "&lt;script&gt;" in diff_html
+    assert "<script>bad()" not in diff_html
+
+
+def test_host_detail_response_escapes_xss(tmp_path: Path, monkeypatch) -> None:
+    """Test that XSS payloads in host detail page response are escaped."""
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    origin_dir = tmp_path / "origin"
+    dest_dir = tmp_path / "dest"
+    diff_dir = tmp_path / "diff"
+    origin_dir.mkdir()
+    dest_dir.mkdir()
+    diff_dir.mkdir()
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(app, "DEST_DIR", str(dest_dir))
+    monkeypatch.setattr(app, "DIFF_DIR", str(diff_dir))
+
+    # Create files with XSS payload
+    origin_file = origin_dir / "router1-show_version.txt"
+    dest_file = dest_dir / "router1-show_version.txt"
+    xss_payload = "Version 1.0\n<script>alert('XSS')</script>"
+    origin_file.write_text(xss_payload, encoding="utf-8")
+    dest_file.write_text(xss_payload, encoding="utf-8")
+
+    with app.app.test_client() as client:
+        response = client.get("/host/router1")
+        assert response.status_code == 200
+        html_content = response.data.decode("utf-8")
+
+        # Script tags should be escaped in the response
+        assert "&lt;script&gt;" in html_content
+        # Raw script should NOT be in response
+        assert "<script>alert('XSS')</script>" not in html_content
+
+
+def test_compare_files_response_escapes_xss(tmp_path: Path, monkeypatch) -> None:
+    """Test that XSS payloads in compare files response are escaped."""
+    hosts_csv = tmp_path / "hosts.csv"
+    csv_content = (
+        "host,ip,username,port,model\n"
+        "router1,10.0.0.1,admin,22,cisco\n"
+        "router2,10.0.0.2,admin,22,cisco\n"
+    )
+    hosts_csv.write_text(csv_content, encoding="utf-8")
+    monkeypatch.setattr(app, "HOSTS_CSV", str(hosts_csv))
+
+    origin_dir = tmp_path / "origin"
+    origin_dir.mkdir()
+    monkeypatch.setattr(app, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(app, "DEST_DIR", str(tmp_path / "dest"))
+
+    # Create files with XSS payload
+    file1 = origin_dir / "router1-show_version.txt"
+    file2 = origin_dir / "router2-show_version.txt"
+    xss_payload1 = "Config line\n<img src=x onerror='alert(1)'>"
+    xss_payload2 = "Config line\n<img src=x onerror='alert(2)'>"
+    file1.write_text(xss_payload1, encoding="utf-8")
+    file2.write_text(xss_payload2, encoding="utf-8")
+
+    with app.app.test_client() as client:
+        response = client.post(
+            "/compare_files",
+            data={
+                "host1": "router1",
+                "host2": "router2",
+                "base": "origin",
+                "command": "show version",
+                "view": "sidebyside",
+            },
+        )
+        assert response.status_code == 200
+        html_content = response.data.decode("utf-8")
+
+        # HTML should be escaped
+        assert "&lt;img" in html_content
+        # Raw HTML should NOT be in response
+        assert "<img src=x onerror=" not in html_content
+        assert "alert(1)" not in html_content or "&quot;alert(1)&quot;" in html_content
