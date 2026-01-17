@@ -136,24 +136,17 @@ def require_api_token(f):
             )
             return jsonify({"error": "Authentication required"}), 401
 
-        # Check for Bearer token format and length
-        if not auth_header.startswith("Bearer ") or len(auth_header) <= 7:
+        # Check for Bearer token format and ensure at least one character after "Bearer "
+        # "Bearer " is 7 characters, so we need at least 8 characters total
+        if not auth_header.startswith("Bearer ") or len(auth_header) < 8:
             logger.warning(
                 "Unauthorized access attempt to %s - invalid Authorization format",
                 request.path
             )
             return jsonify({"error": "Authentication required"}), 401
 
-        # Extract and validate token
+        # Extract token (everything after "Bearer ")
         token = auth_header[7:]  # Remove "Bearer " prefix
-
-        # Validate token is not empty
-        if not token:
-            logger.warning(
-                "Unauthorized access attempt to %s - empty token",
-                request.path
-            )
-            return jsonify({"error": "Authentication required"}), 401
 
         # Use constant-time comparison to prevent timing attacks
         if not hmac.compare_digest(token, expected_token):
