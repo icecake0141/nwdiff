@@ -1,5 +1,5 @@
 """
-Copyright 2025 Nwdiff Contributors
+Copyright 2025 NW-Diff Contributors
 SPDX-License-Identifier: Apache-2.0
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -275,7 +275,7 @@ def test_logging_configuration_creates_log_file() -> None:
     """Test that logging is properly configured and creates log files."""
     # Import logger from app to verify it exists
     assert app.logger is not None
-    assert app.logger.name == "nwdiff"
+    assert app.logger.name == "nw-diff"
     assert app.logger.level == app.logging.DEBUG
 
 
@@ -284,10 +284,10 @@ def test_logs_view_endpoint(tmp_path: Path, monkeypatch) -> None:
     # Create a test log file
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()
-    log_file = logs_dir / "nwdiff.log"
+    log_file = logs_dir / "nw-diff.log"
     log_file.write_text(
-        "2025-01-16 12:00:00 - nwdiff - INFO - Test log line 1\n"
-        "2025-01-16 12:00:01 - nwdiff - ERROR - Test error line\n",
+        "2025-01-16 12:00:00 - nw-diff - INFO - Test log line 1\n"
+        "2025-01-16 12:00:01 - nw-diff - ERROR - Test error line\n",
         encoding="utf-8",
     )
 
@@ -306,11 +306,11 @@ def test_logs_api_endpoint(tmp_path: Path, monkeypatch) -> None:
     # Create a test log file
     logs_dir = tmp_path / "logs"
     logs_dir.mkdir()
-    log_file = logs_dir / "nwdiff.log"
+    log_file = logs_dir / "nw-diff.log"
     log_file.write_text(
-        "2025-01-16 12:00:00 - nwdiff - INFO - Test info log\n"
-        "2025-01-16 12:00:01 - nwdiff - ERROR - Test error log\n"
-        "2025-01-16 12:00:02 - nwdiff - DEBUG - Test debug log\n",
+        "2025-01-16 12:00:00 - nw-diff - INFO - Test info log\n"
+        "2025-01-16 12:00:01 - nw-diff - ERROR - Test error log\n"
+        "2025-01-16 12:00:02 - nw-diff - DEBUG - Test debug log\n",
         encoding="utf-8",
     )
 

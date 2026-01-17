@@ -1,6 +1,6 @@
-# Nwdiff Project
+# NW-Diff Project
 
-Nwdiff is a Flask-based web application designed to retrieve, compare, and display configuration or status data collected from network devices. It leverages Netmiko to connect to devices and capture data defined in a CSV file. Using diff-match-patch, the application computes differences between two sets of data and presents the results in both inline and side-by-side views. Diff HTML files are generated and stored in a dedicated "diff" directory for subsequent review.
+NW-Diff is a Flask-based web application designed to retrieve, compare, and display configuration or status data collected from network devices. It leverages Netmiko to connect to devices and capture data defined in a CSV file. Using diff-match-patch, the application computes differences between two sets of data and presents the results in both inline and side-by-side views. Diff HTML files are generated and stored in a dedicated "diff" directory for subsequent review.
 
 ## Features
 
@@ -28,11 +28,11 @@ Nwdiff is a Flask-based web application designed to retrieve, compare, and displ
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/nwdiff.git
+   git clone https://github.com/yourusername/nw-diff.git
    ```
 2. **Navigate to the project directory:**
    ```bash
-   cd /workspaces/nwdiff
+   cd /workspaces/nw-diff
    ```
 
 3. **Install dependencies:**

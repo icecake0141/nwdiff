@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Copyright 2025 Nwdiff Contributors
+Copyright 2025 NW-Diff Contributors
 SPDX-License-Identifier: Apache-2.0
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,11 +30,11 @@ LOGS_DIR = "logs"
 os.makedirs(LOGS_DIR, exist_ok=True)
 
 # Create logger
-logger = logging.getLogger("nwdiff")
+logger = logging.getLogger("nw-diff")
 logger.setLevel(logging.DEBUG)
 
 # Create rotating file handler (10MB max, keep 5 backup files)
-log_file = os.path.join(LOGS_DIR, "nwdiff.log")
+log_file = os.path.join(LOGS_DIR, "nw-diff.log")
 file_handler = logging.handlers.RotatingFileHandler(
     log_file, maxBytes=10 * 1024 * 1024, backupCount=5
 )
@@ -56,7 +56,7 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
-logger.info("Nwdiff application starting")
+logger.info("NW-Diff application starting")
 
 # Directories and CSV file settings
 ORIGIN_DIR = "origin"
@@ -707,7 +707,7 @@ def logs_view():
     """
     logger.debug("Logs view page requested")
     # Read the last 1000 lines from the log file
-    log_file_path = os.path.join(LOGS_DIR, "nwdiff.log")
+    log_file_path = os.path.join(LOGS_DIR, "nw-diff.log")
     lines = []
     try:
         if os.path.exists(log_file_path):
@@ -747,7 +747,7 @@ def logs_api():
 
     tail = request.args.get("tail", "true").lower() == "true"
 
-    log_file_path = os.path.join(LOGS_DIR, "nwdiff.log")
+    log_file_path = os.path.join(LOGS_DIR, "nw-diff.log")
     log_entries = []
 
     try:
