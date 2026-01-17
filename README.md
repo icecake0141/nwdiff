@@ -52,10 +52,20 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
    Required packages include Flask, Netmiko, and diff-match-patch.
 
 4. **Configure Environment Variables:**
-   Set the `DEVICE_PASSWORD` environment variable to provide the password needed for device connections:
-   ```bash
-   export DEVICE_PASSWORD=your_device_password
-   ```
+   - Set the `DEVICE_PASSWORD` environment variable to provide the password needed for device connections:
+     ```bash
+     export DEVICE_PASSWORD=your_device_password
+     ```
+   - **Set the `NW_DIFF_API_TOKEN` environment variable to secure sensitive API endpoints** (capture, logs, export):
+     ```bash
+     export NW_DIFF_API_TOKEN=your_secure_random_token
+     ```
+     Generate a secure token with:
+     ```bash
+     python -c "import secrets; print(secrets.token_urlsafe(32))"
+     ```
+
+     **Important:** If `NW_DIFF_API_TOKEN` is not set, sensitive endpoints will be accessible without authentication (not recommended for production).
 
 ## Usage
 
@@ -90,11 +100,30 @@ For local development, you can enable debug mode by setting the `APP_DEBUG` envi
 
 ### Interacting with Endpoints
 
+#### Public Endpoints (No Authentication Required)
+- **View Host List:** `/` (homepage)
+- **View Detailed Device Info:** `/host/<hostname>`
+- **Compare Files:** `/compare_files`
+
+#### Protected Endpoints (Require Authentication)
+The following endpoints require authentication via the `Authorization: Bearer <token>` header:
 - **Capture Data:**
   - For origin data: `/capture/origin/<hostname>`
   - For destination data: `/capture/dest/<hostname>`
-- **View Detailed Device Info:**
-  `/host/<hostname>`
+  - For all devices: `/capture_all/origin` or `/capture_all/dest`
+- **View Logs:**
+  - Web UI: `/logs`
+  - API: `/api/logs`
+- **Export Data:**
+  - HTML export: `/export/<hostname>`
+  - JSON API: `/api/export/<hostname>`
+
+**Example using curl:**
+```bash
+curl -H "Authorization: Bearer your_token_here" http://localhost:5000/api/logs
+```
+
+**Note:** If `NW_DIFF_API_TOKEN` is not set, these endpoints will work without authentication (not recommended for production).
 
 ### Review Diff Results
 
