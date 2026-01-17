@@ -201,6 +201,8 @@ def test_rotate_backups_keeps_last_10(tmp_path: Path, monkeypatch) -> None:
     remaining_names = sorted([f.name for f in backup_files])
     for i in range(5, 15):
         assert f"backup_{i:02d}_test.txt" in remaining_names
+
+
 def test_export_json_returns_404_for_missing_hostname(
     tmp_path: Path, monkeypatch
 ) -> None:
