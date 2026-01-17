@@ -114,6 +114,7 @@ def require_api_token(f):
     The expected token is read from NW_DIFF_API_TOKEN environment variable.
     Returns 401 for missing or invalid tokens without leaking internal details.
     """
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         expected_token = os.environ.get("NW_DIFF_API_TOKEN")
@@ -122,7 +123,7 @@ def require_api_token(f):
         if not expected_token:
             logger.warning(
                 "NW_DIFF_API_TOKEN not set - authentication not enforced for %s",
-                request.path
+                request.path,
             )
             return f(*args, **kwargs)
 
@@ -132,16 +133,16 @@ def require_api_token(f):
         if not auth_header:
             logger.warning(
                 "Unauthorized access attempt to %s - missing Authorization header",
-                request.path
+                request.path,
             )
             return jsonify({"error": "Authentication required"}), 401
 
-        # Check for Bearer token format and ensure at least one character after "Bearer "
+        # Check for Bearer token format with at least one character after
         # "Bearer " is 7 characters, so we need at least 8 characters total
         if not auth_header.startswith("Bearer ") or len(auth_header) < 8:
             logger.warning(
                 "Unauthorized access attempt to %s - invalid Authorization format",
-                request.path
+                request.path,
             )
             return jsonify({"error": "Authentication required"}), 401
 
@@ -152,8 +153,7 @@ def require_api_token(f):
         # hmac.compare_digest safely handles tokens of different lengths
         if not hmac.compare_digest(token, expected_token):
             logger.warning(
-                "Unauthorized access attempt to %s - invalid token",
-                request.path
+                "Unauthorized access attempt to %s - invalid token", request.path
             )
             return jsonify({"error": "Authentication required"}), 401
 
