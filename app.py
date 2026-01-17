@@ -20,7 +20,15 @@ import logging.handlers
 import os
 import re
 
-from flask import Flask, make_response, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from diff_match_patch import diff_match_patch
 from netmiko import ConnectHandler
 
@@ -670,6 +678,8 @@ def export_diff(hostname):
         "<p><strong>IP Address:</strong> {}</p>".format(device_info["ip"]),
         "<hr>",
     ]
+
+
 # --- JSON Export API endpoint ---
 @app.route("/api/export/<hostname>")
 def export_json(hostname):
@@ -706,75 +716,49 @@ def export_json(hostname):
 
                 origin_mtime = get_file_mtime(origin_path)
                 dest_mtime = get_file_mtime(dest_path)
-                status, diff_html = compute_diff(origin_data, dest_data, "inline")
+                status = compute_diff_status(origin_data, dest_data)
 
-                html_parts.append("<div class='card mb-3'>")
-                html_parts.append(
-                    "<div class='card-header'><strong>Command:</strong> {}</div>".format(
-                        command
-                    )
-                )
-                html_parts.append("<div class='card-body'>")
-                html_parts.append(
-                    "<p><strong>Origin Modified:</strong> {}</p>".format(origin_mtime)
-                )
-                html_parts.append(
-                    "<p><strong>Dest Modified:</strong> {}</p>".format(dest_mtime)
-                )
-                if status == "changes detected":
-                    html_parts.append(
-                        "<span style='background-color: #ffff99; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(
-                            status
-                        )
-                    )
-                elif status == "identical":
-                    html_parts.append(
-                        "<span style='background-color: #add8e6; font-weight:bold; padding: 5px; color:black;'>{}</span>".format(
-                            status
-                        )
-                    )
-                else:
-                    html_parts.append(
-                        "<span class='badge badge-info'>{}</span>".format(status)
-                    )
-                html_parts.append("<div class='mt-3'>{}</div>".format(diff_html))
-                html_parts.append("</div></div>")
+                command_data = {
+                    "command": command,
+                    "origin": {"exists": True, "timestamp": origin_mtime},
+                    "dest": {"exists": True, "timestamp": dest_mtime},
+                    "diff_status": status,
+                }
+                export_data["commands"].append(command_data)
             except (IOError, OSError) as exc:  # pylint: disable=broad-exception-caught
-                html_parts.append("<div class='card mb-3'>")
-                html_parts.append(
-                    "<div class='card-header'><strong>Command:</strong> {}</div>".format(
-                        command
-                    )
-                )
-                html_parts.append("<div class='card-body'>")
-                html_parts.append(
-                    "<p class='text-danger'>Error reading files: {}</p>".format(
-                        str(exc)
-                    )
-                )
-                html_parts.append("</div></div>")
+                logger.warning("Error reading files for command %s: %s", command, exc)
+                command_data = {
+                    "command": command,
+                    "origin": {"exists": False, "timestamp": None},
+                    "dest": {"exists": False, "timestamp": None},
+                    "diff_status": "error",
+                    "error": str(exc),
+                }
+                export_data["commands"].append(command_data)
         else:
-            html_parts.append("<div class='card mb-3'>")
-            html_parts.append(
-                "<div class='card-header'><strong>Command:</strong> {}</div>".format(
-                    command
-                )
-            )
-            html_parts.append("<div class='card-body'>")
-            html_parts.append(
-                "<p class='text-danger'>Files not found for this command</p>"
-            )
-            html_parts.append("</div></div>")
+            command_data = {
+                "command": command,
+                "origin": {
+                    "exists": os.path.exists(origin_path),
+                    "timestamp": (
+                        get_file_mtime(origin_path)
+                        if os.path.exists(origin_path)
+                        else None
+                    ),
+                },
+                "dest": {
+                    "exists": os.path.exists(dest_path),
+                    "timestamp": (
+                        get_file_mtime(dest_path) if os.path.exists(dest_path) else None
+                    ),
+                },
+                "diff_status": "file not found",
+            }
+            export_data["commands"].append(command_data)
 
-    html_parts.extend(["</div>", "</body>", "</html>"])
-    html_content = "\n".join(html_parts)
+    return jsonify(export_data)
 
-    response = make_response(html_content)
-    response.headers["Content-Type"] = "text/html"
-    response.headers["Content-Disposition"] = (
-        "attachment; filename={}-diff-export.html".format(safe_hostname)
-    )
-    return response
+
 # --- Logs Web UI ---
 @app.route("/logs")
 def logs_view():
