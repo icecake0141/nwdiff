@@ -59,6 +59,10 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
 
 ## Usage
 
+### Running in Production Mode (Default)
+
+By default, the application runs with Flask debug mode **disabled** for security:
+
 1. **Run the Application:**
    ```bash
    python app.py
@@ -66,15 +70,35 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
 2. **Access the Application:**
    Open your browser and navigate to [http://localhost:5000](http://localhost:5000).
 
-3. **Interact with Endpoints:**
-   - **Capture Data:**
-     - For origin data: `/capture/origin/<hostname>`
-     - For destination data: `/capture/dest/<hostname>`
-   - **View Detailed Device Info:**
-     `/host/<hostname>`
+### Running in Development Mode
 
-4. **Review Diff Results:**
-   The computed diff HTML files are stored in the `diff` directory for offline viewing.
+For local development, you can enable debug mode by setting the `APP_DEBUG` environment variable:
+
+1. **Run with Debug Mode:**
+   ```bash
+   export APP_DEBUG=true
+   python app.py
+   ```
+   Or run it inline:
+   ```bash
+   APP_DEBUG=true python app.py
+   ```
+2. **Access the Application:**
+   Open your browser and navigate to [http://localhost:5000](http://localhost:5000).
+
+**Note:** Debug mode should **never** be enabled in production environments as it can expose sensitive information and create security vulnerabilities.
+
+### Interacting with Endpoints
+
+- **Capture Data:**
+  - For origin data: `/capture/origin/<hostname>`
+  - For destination data: `/capture/dest/<hostname>`
+- **View Detailed Device Info:**
+  `/host/<hostname>`
+
+### Review Diff Results
+
+The computed diff HTML files are stored in the `diff` directory for offline viewing.
 
 ## Development
 

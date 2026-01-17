@@ -1000,4 +1000,6 @@ def logs_api():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Read debug mode from environment variable, default to False for security
+    debug_mode = os.environ.get("APP_DEBUG", "false").lower() in ("true", "1", "yes")
+    app.run(debug=debug_mode)
