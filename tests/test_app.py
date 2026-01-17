@@ -14,6 +14,8 @@ Review required for correctness, security, and licensing.
 
 from __future__ import annotations
 
+import importlib
+import logging
 import os
 import re
 import sys
@@ -366,8 +368,6 @@ def test_logger_handlers_not_duplicated_on_reimport() -> None:
     initial_handler_count = len(app.logger.handlers)
 
     # Re-import the module (simulates WSGI reloading)
-    import importlib
-
     importlib.reload(app)
 
     # Check that handlers were not duplicated
@@ -378,8 +378,6 @@ def test_create_backup_logs_warning_on_failure(
     tmp_path: Path, monkeypatch, caplog
 ) -> None:
     """Test that create_backup logs a warning instead of using print() on failure."""
-    import logging
-
     backup_dir = tmp_path / "backup"
     backup_dir.mkdir()
     monkeypatch.setattr(app, "BACKUP_DIR", str(backup_dir))
