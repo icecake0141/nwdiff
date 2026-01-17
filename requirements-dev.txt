@@ -10,7 +10,7 @@
 # This file was created or modified with the assistance of an AI (Large Language Model).
 # Review required for correctness, security, and licensing.
 black==24.10.0
-mypy==1.13.0
+mypy==1.19.1
 pip-audit==2.10.0
 pre-commit==4.0.1
 pylint==3.3.1
