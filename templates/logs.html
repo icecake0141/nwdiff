@@ -31,7 +31,7 @@
         </div>
         <div class="btn-group mr-2" role="group">
             <select id="refreshInterval" class="form-control" style="display: inline-block; width: auto;">
-                <option value="5">5 seconds</option>
+                <option value="5" selected>5 seconds</option>
                 <option value="10">10 seconds</option>
                 <option value="30">30 seconds</option>
                 <option value="60">60 seconds</option>
@@ -110,7 +110,8 @@
         }
 
         const logDiv = document.getElementById('logContent');
-        logDiv.innerHTML = filteredLines.join('\n');
+        // Use textContent to safely set the content without HTML parsing
+        logDiv.textContent = filteredLines.join('\n');
         
         // Apply color coding
         colorCodeLogs(logDiv);
@@ -123,13 +124,65 @@
     }
 
     function colorCodeLogs(logDiv) {
-        let html = logDiv.innerHTML;
-        html = html.replace(/- ERROR -/g, '<span style="color: #dc3545; font-weight: bold;">- ERROR -</span>');
-        html = html.replace(/- CRITICAL -/g, '<span style="color: #dc3545; font-weight: bold; background-color: #f8d7da;">- CRITICAL -</span>');
-        html = html.replace(/- WARNING -/g, '<span style="color: #ffc107; font-weight: bold;">- WARNING -</span>');
-        html = html.replace(/- INFO -/g, '<span style="color: #17a2b8;">- INFO -</span>');
-        html = html.replace(/- DEBUG -/g, '<span style="color: #6c757d;">- DEBUG -</span>');
-        logDiv.innerHTML = html;
+        // Safely escape HTML and apply color coding using DOM methods
+        const text = logDiv.textContent;
+        const lines = text.split('\n');
+        logDiv.innerHTML = '';
+        
+        lines.forEach(function(line) {
+            const lineDiv = document.createElement('div');
+            
+            // Check for log levels and apply styling
+            if (line.includes('- ERROR -')) {
+                const parts = line.split('- ERROR -');
+                lineDiv.appendChild(document.createTextNode(parts[0]));
+                const errorSpan = document.createElement('span');
+                errorSpan.style.color = '#dc3545';
+                errorSpan.style.fontWeight = 'bold';
+                errorSpan.textContent = '- ERROR -';
+                lineDiv.appendChild(errorSpan);
+                lineDiv.appendChild(document.createTextNode(parts.slice(1).join('- ERROR -')));
+            } else if (line.includes('- CRITICAL -')) {
+                const parts = line.split('- CRITICAL -');
+                lineDiv.appendChild(document.createTextNode(parts[0]));
+                const criticalSpan = document.createElement('span');
+                criticalSpan.style.color = '#dc3545';
+                criticalSpan.style.fontWeight = 'bold';
+                criticalSpan.style.backgroundColor = '#f8d7da';
+                criticalSpan.textContent = '- CRITICAL -';
+                lineDiv.appendChild(criticalSpan);
+                lineDiv.appendChild(document.createTextNode(parts.slice(1).join('- CRITICAL -')));
+            } else if (line.includes('- WARNING -')) {
+                const parts = line.split('- WARNING -');
+                lineDiv.appendChild(document.createTextNode(parts[0]));
+                const warningSpan = document.createElement('span');
+                warningSpan.style.color = '#ffc107';
+                warningSpan.style.fontWeight = 'bold';
+                warningSpan.textContent = '- WARNING -';
+                lineDiv.appendChild(warningSpan);
+                lineDiv.appendChild(document.createTextNode(parts.slice(1).join('- WARNING -')));
+            } else if (line.includes('- INFO -')) {
+                const parts = line.split('- INFO -');
+                lineDiv.appendChild(document.createTextNode(parts[0]));
+                const infoSpan = document.createElement('span');
+                infoSpan.style.color = '#17a2b8';
+                infoSpan.textContent = '- INFO -';
+                lineDiv.appendChild(infoSpan);
+                lineDiv.appendChild(document.createTextNode(parts.slice(1).join('- INFO -')));
+            } else if (line.includes('- DEBUG -')) {
+                const parts = line.split('- DEBUG -');
+                lineDiv.appendChild(document.createTextNode(parts[0]));
+                const debugSpan = document.createElement('span');
+                debugSpan.style.color = '#6c757d';
+                debugSpan.textContent = '- DEBUG -';
+                lineDiv.appendChild(debugSpan);
+                lineDiv.appendChild(document.createTextNode(parts.slice(1).join('- DEBUG -')));
+            } else {
+                lineDiv.textContent = line;
+            }
+            
+            logDiv.appendChild(lineDiv);
+        });
     }
 
     function updateLineCount(count) {
