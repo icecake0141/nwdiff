@@ -43,7 +43,7 @@ jobs:
         run: pylint app.py tests nw_diff
 
       - name: Static analysis (mypy)
-        run: mypy tests
+        run: mypy app.py nw_diff tests
 
       - name: Run tests
         run: pytest
