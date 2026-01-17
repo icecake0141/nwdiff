@@ -74,6 +74,7 @@
                 <a href="{{ url_for('capture', base='origin', hostname=host.host) }}" class="btn btn-success btn-sm mb-1 capture-btn">Capture Origin</a>
                 <a href="{{ url_for('capture', base='dest', hostname=host.host) }}" class="btn btn-primary btn-sm mb-1 capture-btn">Capture Dest</a>
                 <a href="{{ url_for('host_detail', hostname=host.host) }}" class="btn btn-secondary btn-sm mb-1">View Details</a>
+                <a href="{{ url_for('export_diff', hostname=host.host) }}" class="btn btn-warning btn-sm mb-1">Export</a>
             </td>
         </tr>
     {% endfor %}

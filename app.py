@@ -18,8 +18,17 @@ import datetime
 import logging
 import logging.handlers
 import os
+import re
 
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Flask,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from diff_match_patch import diff_match_patch
 from netmiko import ConnectHandler
 
@@ -710,6 +719,122 @@ def compare_files():
     )
 
 
+# --- Export diff HTML for a host ---
+@app.route("/export/<hostname>")
+def export_diff(hostname):
+    """
+    Generates and returns a downloadable HTML file containing all diff results
+    for the specified hostname.
+    """
+    commands = get_commands_for_host(hostname)
+    device_info = get_device_info(hostname)
+    if not device_info:
+        return "Host not found", 404
+
+    # Sanitize hostname for filename - prevent path traversal
+    safe_hostname = re.sub(r"[^\w\-]", "_", hostname)
+
+    # Generate HTML content
+    bootstrap_css = (
+        "https://stackpath.bootstrapcdn.com/" "bootstrap/4.5.2/css/bootstrap.min.css"
+    )
+    html_parts = [
+        "<!DOCTYPE html>",
+        "<html lang='en'>",
+        "<head>",
+        "<meta charset='UTF-8'>",
+        f"<title>Diff Export - {hostname}</title>",
+        f"<link rel='stylesheet' href='{bootstrap_css}'>",
+        "</head>",
+        "<body>",
+        "<div class='container mt-4'>",
+        f"<h1>Diff Export for Host: {hostname}</h1>",
+        f"<p><strong>IP Address:</strong> {device_info['ip']}</p>",
+        "<hr>",
+    ]
+
+    for command in commands:
+        origin_path = get_file_path(hostname, command, "origin")
+        dest_path = get_file_path(hostname, command, "dest")
+
+        if os.path.exists(origin_path) and os.path.exists(dest_path):
+            try:
+                with open(origin_path, encoding="utf-8") as f:
+                    origin_data = f.read()
+                with open(dest_path, encoding="utf-8") as f:
+                    dest_data = f.read()
+
+                origin_mtime = get_file_mtime(origin_path)
+                dest_mtime = get_file_mtime(dest_path)
+                status, diff_html = compute_diff(origin_data, dest_data, "inline")
+
+                html_parts.append("<div class='card mb-3'>")
+                cmd_header = (
+                    f"<div class='card-header'>"
+                    f"<strong>Command:</strong> {command}</div>"
+                )
+                html_parts.append(cmd_header)
+                html_parts.append("<div class='card-body'>")
+                html_parts.append(
+                    f"<p><strong>Origin Modified:</strong> {origin_mtime}</p>"
+                )
+                html_parts.append(
+                    f"<p><strong>Dest Modified:</strong> {dest_mtime}</p>"
+                )
+                if status == "changes detected":
+                    status_span = (
+                        f"<span style='background-color: #ffff99; "
+                        f"font-weight:bold; padding: 5px; "
+                        f"color:black;'>{status}</span>"
+                    )
+                    html_parts.append(status_span)
+                elif status == "identical":
+                    status_span = (
+                        f"<span style='background-color: #add8e6; "
+                        f"font-weight:bold; padding: 5px; "
+                        f"color:black;'>{status}</span>"
+                    )
+                    html_parts.append(status_span)
+                else:
+                    html_parts.append(f"<span class='badge badge-info'>{status}</span>")
+                html_parts.append(f"<div class='mt-3'>{diff_html}</div>")
+                html_parts.append("</div></div>")
+            except (IOError, OSError) as exc:  # pylint: disable=broad-exception-caught
+                html_parts.append("<div class='card mb-3'>")
+                cmd_header = (
+                    f"<div class='card-header'>"
+                    f"<strong>Command:</strong> {command}</div>"
+                )
+                html_parts.append(cmd_header)
+                html_parts.append("<div class='card-body'>")
+                html_parts.append(
+                    f"<p class='text-danger'>Error reading files: {exc}</p>"
+                )
+                html_parts.append("</div></div>")
+        else:
+            html_parts.append("<div class='card mb-3'>")
+            cmd_header = (
+                f"<div class='card-header'>"
+                f"<strong>Command:</strong> {command}</div>"
+            )
+            html_parts.append(cmd_header)
+            html_parts.append("<div class='card-body'>")
+            html_parts.append(
+                "<p class='text-danger'>Files not found for this command</p>"
+            )
+            html_parts.append("</div></div>")
+
+    html_parts.extend(["</div>", "</body>", "</html>"])
+    html_content = "\n".join(html_parts)
+
+    response = make_response(html_content)
+    response.headers["Content-Type"] = "text/html"
+    response.headers["Content-Disposition"] = (
+        f"attachment; filename={safe_hostname}-diff-export.html"
+    )
+    return response
+
+
 # --- JSON Export API endpoint ---
 @app.route("/api/export/<hostname>")
 def export_json(hostname):
@@ -737,34 +862,54 @@ def export_json(hostname):
         origin_path = get_file_path(hostname, command, "origin")
         dest_path = get_file_path(hostname, command, "dest")
 
-        command_data = {
-            "command": command,
-            "origin": {
-                "timestamp": get_file_mtime(origin_path),
-                "exists": os.path.exists(origin_path),
-            },
-            "dest": {
-                "timestamp": get_file_mtime(dest_path),
-                "exists": os.path.exists(dest_path),
-            },
-        }
-
-        # Compute diff status if both files exist
         if os.path.exists(origin_path) and os.path.exists(dest_path):
             try:
                 with open(origin_path, encoding="utf-8") as f:
                     origin_data = f.read()
                 with open(dest_path, encoding="utf-8") as f:
                     dest_data = f.read()
-                command_data["diff_status"] = compute_diff_status(
-                    origin_data, dest_data
-                )
-            except Exception as exc:  # pylint: disable=broad-exception-caught
-                command_data["diff_status"] = f"error reading files: {exc}"
-        else:
-            command_data["diff_status"] = "file not found"
 
-        export_data["commands"].append(command_data)
+                origin_mtime = get_file_mtime(origin_path)
+                dest_mtime = get_file_mtime(dest_path)
+                status = compute_diff_status(origin_data, dest_data)
+
+                command_data = {
+                    "command": command,
+                    "origin": {"exists": True, "timestamp": origin_mtime},
+                    "dest": {"exists": True, "timestamp": dest_mtime},
+                    "diff_status": status,
+                }
+                export_data["commands"].append(command_data)
+            except (IOError, OSError) as exc:  # pylint: disable=broad-exception-caught
+                logger.warning("Error reading files for command %s: %s", command, exc)
+                command_data = {
+                    "command": command,
+                    "origin": {"exists": False, "timestamp": None},
+                    "dest": {"exists": False, "timestamp": None},
+                    "diff_status": "error",
+                    "error": str(exc),
+                }
+                export_data["commands"].append(command_data)
+        else:
+            command_data = {
+                "command": command,
+                "origin": {
+                    "exists": os.path.exists(origin_path),
+                    "timestamp": (
+                        get_file_mtime(origin_path)
+                        if os.path.exists(origin_path)
+                        else None
+                    ),
+                },
+                "dest": {
+                    "exists": os.path.exists(dest_path),
+                    "timestamp": (
+                        get_file_mtime(dest_path) if os.path.exists(dest_path) else None
+                    ),
+                },
+                "diff_status": "file not found",
+            }
+            export_data["commands"].append(command_data)
 
     return jsonify(export_data)
 
