@@ -136,7 +136,12 @@ The computed diff HTML files are stored in the `diff` directory for offline view
    pip install -r requirements.txt -r requirements-dev.txt
    ```
 
-2. **Format, lint, type check, and test:**
+2. **Run security audit:**
+   ```bash
+   pip-audit -r requirements.txt -r requirements-dev.txt
+   ```
+
+3. **Format, lint, type check, and test:**
    ```bash
    black tests
    pylint tests
@@ -144,7 +149,7 @@ The computed diff HTML files are stored in the `diff` directory for offline view
    pytest
    ```
 
-3. **Run pre-commit hooks:**
+4. **Run pre-commit hooks:**
    ```bash
    pre-commit run --all-files
    ```
