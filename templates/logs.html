@@ -5,15 +5,51 @@
 {% block content %}
 <h1 class="mb-4">Application Logs</h1>
 
-<div class="mb-3">
-    <button id="refreshBtn" class="btn btn-primary">Refresh Logs</button>
-    <button id="autoRefreshToggle" class="btn btn-secondary">Auto-Refresh: OFF</button>
-    <a href="{{ url_for('host_list') }}" class="btn btn-info">Back to Host List</a>
+<div class="row mb-3">
+    <div class="col-md-12">
+        <div class="btn-group mr-2" role="group">
+            <button id="refreshBtn" class="btn btn-primary">Refresh Logs</button>
+            <button id="autoRefreshToggle" class="btn btn-secondary">Auto-Refresh: OFF</button>
+        </div>
+        <div class="btn-group mr-2" role="group">
+            <select id="limitSelector" class="form-control" style="display: inline-block; width: auto;">
+                <option value="100">100 lines</option>
+                <option value="500">500 lines</option>
+                <option value="1000" selected>1000 lines</option>
+                <option value="5000">5000 lines</option>
+            </select>
+        </div>
+        <div class="btn-group mr-2" role="group">
+            <select id="levelFilter" class="form-control" style="display: inline-block; width: auto;">
+                <option value="">All Levels</option>
+                <option value="DEBUG">DEBUG</option>
+                <option value="INFO">INFO</option>
+                <option value="WARNING">WARNING</option>
+                <option value="ERROR">ERROR</option>
+                <option value="CRITICAL">CRITICAL</option>
+            </select>
+        </div>
+        <div class="btn-group mr-2" role="group">
+            <select id="refreshInterval" class="form-control" style="display: inline-block; width: auto;">
+                <option value="5">5 seconds</option>
+                <option value="10">10 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60">60 seconds</option>
+            </select>
+        </div>
+        <a href="{{ url_for('host_list') }}" class="btn btn-info">Back to Host List</a>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-12">
+        <input type="text" id="searchFilter" class="form-control" placeholder="Search logs...">
+    </div>
 </div>
 
 <div class="card">
     <div class="card-header">
-        <h5 class="mb-0">Log Viewer (Last 1000 lines)</h5>
+        <h5 class="mb-0">Log Viewer <span id="lineCount">({{ log_lines|length }} lines)</span></h5>
     </div>
     <div class="card-body" style="background-color: #f8f9fa;">
         <div id="logContent" style="max-height: 600px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; word-wrap: break-word;">
@@ -38,20 +74,66 @@
 <script>
     let autoRefreshEnabled = false;
     let autoRefreshInterval = null;
+    let allLogLines = [];
 
     function refreshLogs() {
-        fetch("{{ url_for('logs_view') }}")
-            .then(response => response.text())
-            .then(html => {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-                const newContent = doc.getElementById('logContent').innerHTML;
-                document.getElementById('logContent').innerHTML = newContent;
-                // Scroll to bottom
-                const logDiv = document.getElementById('logContent');
-                logDiv.scrollTop = logDiv.scrollHeight;
+        const limit = document.getElementById('limitSelector').value;
+        const level = document.getElementById('levelFilter').value;
+        
+        let url = "{{ url_for('logs_api') }}?limit=" + limit;
+        if (level) {
+            url += "&level=" + level;
+        }
+
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                allLogLines = data.logs || [];
+                applySearchFilter();
+                updateLineCount(data.count);
             })
-            .catch(error => console.error('Error refreshing logs:', error));
+            .catch(error => {
+                console.error('Error refreshing logs:', error);
+                document.getElementById('logContent').innerHTML = 
+                    '<span style="color: red;">Error loading logs. Please try again.</span>';
+            });
+    }
+
+    function applySearchFilter() {
+        const searchTerm = document.getElementById('searchFilter').value.toLowerCase();
+        let filteredLines = allLogLines;
+
+        if (searchTerm) {
+            filteredLines = allLogLines.filter(line => 
+                line.toLowerCase().includes(searchTerm)
+            );
+        }
+
+        const logDiv = document.getElementById('logContent');
+        logDiv.innerHTML = filteredLines.join('\n');
+        
+        // Apply color coding
+        colorCodeLogs(logDiv);
+        
+        // Scroll to bottom
+        logDiv.scrollTop = logDiv.scrollHeight;
+        
+        // Update line count
+        updateLineCount(filteredLines.length);
+    }
+
+    function colorCodeLogs(logDiv) {
+        let html = logDiv.innerHTML;
+        html = html.replace(/- ERROR -/g, '<span style="color: #dc3545; font-weight: bold;">- ERROR -</span>');
+        html = html.replace(/- CRITICAL -/g, '<span style="color: #dc3545; font-weight: bold; background-color: #f8d7da;">- CRITICAL -</span>');
+        html = html.replace(/- WARNING -/g, '<span style="color: #ffc107; font-weight: bold;">- WARNING -</span>');
+        html = html.replace(/- INFO -/g, '<span style="color: #17a2b8;">- INFO -</span>');
+        html = html.replace(/- DEBUG -/g, '<span style="color: #6c757d;">- DEBUG -</span>');
+        logDiv.innerHTML = html;
+    }
+
+    function updateLineCount(count) {
+        document.getElementById('lineCount').textContent = '(' + count + ' lines)';
     }
 
     document.getElementById('refreshBtn').addEventListener('click', function() {
@@ -66,8 +148,9 @@
             btn.textContent = 'Auto-Refresh: ON';
             btn.classList.remove('btn-secondary');
             btn.classList.add('btn-success');
-            // Refresh every 5 seconds
-            autoRefreshInterval = setInterval(refreshLogs, 5000);
+            
+            const interval = parseInt(document.getElementById('refreshInterval').value) * 1000;
+            autoRefreshInterval = setInterval(refreshLogs, interval);
         } else {
             btn.textContent = 'Auto-Refresh: OFF';
             btn.classList.remove('btn-success');
@@ -79,25 +162,35 @@
         }
     });
 
+    // Update refresh interval when changed
+    document.getElementById('refreshInterval').addEventListener('change', function() {
+        if (autoRefreshEnabled) {
+            // Restart auto-refresh with new interval
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            const interval = parseInt(this.value) * 1000;
+            autoRefreshInterval = setInterval(refreshLogs, interval);
+        }
+    });
+
+    // Refresh logs when limit or level changes
+    document.getElementById('limitSelector').addEventListener('change', refreshLogs);
+    document.getElementById('levelFilter').addEventListener('change', refreshLogs);
+
+    // Apply search filter when typing
+    document.getElementById('searchFilter').addEventListener('input', applySearchFilter);
+
     // Auto-scroll to bottom on page load
     window.addEventListener('load', function() {
         const logDiv = document.getElementById('logContent');
         logDiv.scrollTop = logDiv.scrollHeight;
-    });
-
-    // Color-code log levels
-    window.addEventListener('load', function() {
-        const logDiv = document.getElementById('logContent');
-        let html = logDiv.innerHTML;
-
-        // Apply colors to different log levels
-        html = html.replace(/- ERROR -/g, '<span style="color: #dc3545; font-weight: bold;">- ERROR -</span>');
-        html = html.replace(/- CRITICAL -/g, '<span style="color: #dc3545; font-weight: bold; background-color: #f8d7da;">- CRITICAL -</span>');
-        html = html.replace(/- WARNING -/g, '<span style="color: #ffc107; font-weight: bold;">- WARNING -</span>');
-        html = html.replace(/- INFO -/g, '<span style="color: #17a2b8;">- INFO -</span>');
-        html = html.replace(/- DEBUG -/g, '<span style="color: #6c757d;">- DEBUG -</span>');
-
-        logDiv.innerHTML = html;
+        
+        // Color-code log levels
+        colorCodeLogs(logDiv);
+        
+        // Store initial log lines
+        allLogLines = logDiv.textContent.split('\n').filter(line => line.trim());
     });
 </script>
 {% endblock %}

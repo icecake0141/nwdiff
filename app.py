@@ -623,9 +623,17 @@ def logs_view():
     """
     Web UI for viewing logs.
     Displays the most recent log entries with real-time updates.
+    Supports limit parameter to control the number of lines displayed.
     """
     logger.debug("Logs view page requested")
-    # Read the last 1000 lines from the log file
+    
+    # Get limit from query parameter, default to 1000
+    try:
+        limit = int(request.args.get("limit", "1000"))
+        limit = min(limit, 10000)  # Max 10000 lines
+    except ValueError:
+        limit = 1000
+    
     # Import LOGS_DIR at runtime to allow test mocking
     from nw_diff.logging_config import (  # pylint: disable=import-outside-toplevel
         LOGS_DIR as current_logs_dir,
@@ -637,7 +645,7 @@ def logs_view():
         if os.path.exists(log_file_path):
             with open(log_file_path, "r", encoding="utf-8") as f:
                 all_lines = f.readlines()
-                lines = all_lines[-1000:]  # Get last 1000 lines
+                lines = all_lines[-limit:]  # Get last N lines
         else:
             logger.warning("Log file does not exist yet: %s", log_file_path)
     except Exception as exc:  # pylint: disable=broad-exception-caught

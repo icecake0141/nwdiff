@@ -7,11 +7,11 @@
 
 <!-- New buttons for capturing all devices and file comparison -->
 <div class="mb-3">
-    <form method="post" action="{{ url_for('capture_all', base='origin') }}" style="display: inline;">
-        <button type="submit" class="btn btn-success btn-lg capture-btn">Capture Origin All</button>
+    <form method="post" action="{{ url_for('capture_all', base='origin') }}" style="display: inline;" class="capture-all-form" data-base="origin">
+        <button type="submit" class="btn btn-success btn-lg capture-all-btn">Capture Origin All</button>
     </form>
-    <form method="post" action="{{ url_for('capture_all', base='dest') }}" style="display: inline;">
-        <button type="submit" class="btn btn-primary btn-lg capture-btn">Capture Dest All</button>
+    <form method="post" action="{{ url_for('capture_all', base='dest') }}" style="display: inline;" class="capture-all-form" data-base="dest">
+        <button type="submit" class="btn btn-primary btn-lg capture-all-btn">Capture Dest All</button>
     </form>
     <a href="{{ url_for('compare_files') }}" class="btn btn-info btn-lg">Compare Files</a>
 </div>
@@ -127,6 +127,34 @@
     // Add event listeners
     searchInput.addEventListener('input', filterHosts);
     statusFilter.addEventListener('change', filterHosts);
+})();
+
+// Confirmation dialog for "Capture All" actions
+(function() {
+    const captureAllForms = document.querySelectorAll('.capture-all-form');
+    const totalDevices = {{ hosts|length }};
+
+    captureAllForms.forEach(function(form) {
+        form.addEventListener('submit', function(event) {
+            const base = form.getAttribute('data-base');
+            const baseLabel = base === 'origin' ? 'Origin' : 'Dest';
+            
+            const confirmMessage = 
+                '⚠️ WARNING: Capture All Operation ⚠️\n\n' +
+                'You are about to capture data from ALL ' + totalDevices + ' device(s).\n\n' +
+                'This operation will:\n' +
+                '• Connect to all ' + totalDevices + ' devices sequentially\n' +
+                '• Execute multiple commands on each device\n' +
+                '• May take several minutes to complete\n' +
+                '• Will overwrite existing ' + baseLabel + ' data\n\n' +
+                'Are you sure you want to continue?';
+            
+            if (!confirm(confirmMessage)) {
+                event.preventDefault();
+                return false;
+            }
+        });
+    });
 })();
 </script>
 {% endblock %}
