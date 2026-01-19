@@ -23,6 +23,7 @@ import time
 from pathlib import Path
 
 import pytest
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -1528,8 +1529,6 @@ def test_hosts_csv_error_message_shows_configured_path(
 
 def test_app_has_proxyfix_middleware() -> None:
     """Test that ProxyFix middleware is applied to the Flask app."""
-    from werkzeug.middleware.proxy_fix import ProxyFix
-
     # Check that app.wsgi_app is wrapped with ProxyFix
     assert isinstance(app.app.wsgi_app, ProxyFix)
 

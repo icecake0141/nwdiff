@@ -233,15 +233,15 @@ def host_list():
     hosts = []
     rows = read_hosts_csv()  # CSV reading ignores comment lines
     for row in rows:
-        host = row["host"]
+        hostname = row["host"]
         ip = row["ip"]
-        commands = get_commands_for_host(host)
+        commands = get_commands_for_host(hostname)
         origin_info = []
         dest_info = []
         diff_info = []
         for command in commands:
-            origin_path = get_file_path(host, command, "origin")
-            dest_path = get_file_path(host, command, "dest")
+            origin_path = get_file_path(hostname, command, "origin")
+            dest_path = get_file_path(hostname, command, "dest")
             origin_info.append(
                 {"command": command, "mtime": get_file_mtime(origin_path)}
             )
@@ -257,7 +257,7 @@ def host_list():
             diff_info.append({"command": command, "status": status})
         hosts.append(
             {
-                "host": host,
+                "host": hostname,
                 "ip": ip,
                 "origin_info": origin_info,
                 "dest_info": dest_info,
