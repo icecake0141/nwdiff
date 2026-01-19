@@ -13,6 +13,7 @@ Review required for correctness, security, and licensing.
 """
 
 import base64
+import binascii
 import hmac
 import logging
 import os
@@ -161,7 +162,7 @@ def require_api_token(f):
                 )
                 return jsonify({"error": "Authentication required"}), 401
 
-            except (ValueError, UnicodeDecodeError, base64.binascii.Error) as e:
+            except (ValueError, UnicodeDecodeError, binascii.Error) as e:
                 logger.warning(
                     "Unauthorized access attempt to %s - malformed Basic auth: %s",
                     request.path,
