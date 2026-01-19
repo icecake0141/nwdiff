@@ -236,40 +236,57 @@ The ProxyFix middleware ensures that the Flask app correctly detects the origina
    # Edit .env and set DEVICE_PASSWORD and NW_DIFF_API_TOKEN
    ```
 
-3. **Generate TLS certificates (self-signed for development):**
+3. **Generate TLS certificates and Basic Auth (automated):**
+   
+   **Option A: Automated Setup (Recommended for CI/CD)**
    ```bash
+   # Set environment variables
+   export NW_DIFF_BASIC_USER=admin
+   export NW_DIFF_BASIC_PASSWORD=your_strong_password
+   export CERT_HOSTNAME=myserver.example.com  # Optional, defaults to localhost
+   
+   # Run automated initialization script
+   ./docker/nginx/init-certs-and-htpasswd.sh
+   ```
+   This script will:
+   - Generate self-signed TLS certificates (for development/demo)
+   - Create .htpasswd file with provided credentials
+   - Validate file permissions and configuration
+   - Display security warnings and reminders
+   
+   **Option B: Interactive Setup**
+   ```bash
+   # Generate certificates interactively
    ./scripts/mk-certs.sh
    # Follow prompts to generate certificates
    # Or specify hostname: CERT_HOSTNAME=myserver.example.com ./scripts/docker-setup.sh
-   ```
-
-4. **Generate Basic Authentication credentials:**
-   ```bash
+   
+   # Generate Basic Auth credentials interactively
    ./scripts/mk-htpasswd.sh
    # Follow prompts to create username/password
    ```
 
-5. **Create hosts.csv inventory file:**
+4. **Create hosts.csv inventory file:**
    ```bash
    cp hosts.csv.sample hosts.csv
    # Edit hosts.csv with your device information
    ```
 
-6. **Start the application stack:**
+5. **Start the application stack:**
    ```bash
    docker-compose up -d
    ```
 
-7. **Access the application:**
+6. **Access the application:**
    - HTTPS: `https://localhost/` (you'll need to accept the self-signed certificate warning)
    - You'll be prompted for Basic Auth credentials
 
-8. **View logs:**
+7. **View logs:**
    ```bash
    docker-compose logs -f
    ```
 
-9. **Stop the application:**
+8. **Stop the application:**
    ```bash
    docker-compose down
    ```
@@ -356,19 +373,201 @@ docker run --rm -v nw-diff-logs:/data -v $(pwd):/backup alpine tar xzf /backup/n
 
 ### Security Best Practices
 
-1. **Always use HTTPS in production** - HTTP is redirected to HTTPS by default
-2. **Use strong passwords** - Both for Basic Auth and device credentials
-3. **Keep API tokens secure** - Store `NW_DIFF_API_TOKEN` securely, never commit to version control
-4. **Use trusted certificates in production** - Self-signed certificates are for development only
-   - For production: Obtain certificates from Let's Encrypt, a commercial CA, or your organization's PKI
-   - **IMPORTANT**: When using trusted certificates, enable HSTS by uncommenting the line in `docker/nginx.conf`:
+#### Overview
+NW-Diff is designed with security as a priority, but proper deployment requires careful configuration. This section outlines critical security measures for production deployments.
+
+#### TLS/SSL Certificates
+
+**Development/Demo Environments:**
+- Use the provided self-signed certificate generation:
+  ```bash
+  ./scripts/mk-certs.sh
+  # or for automated setup
+  ./docker/nginx/init-certs-and-htpasswd.sh
+  ```
+- Accept browser security warnings (expected for self-signed certificates)
+- **NEVER** use self-signed certificates in production
+
+**Production Environments:**
+- **Recommended**: Let's Encrypt (free, automated, widely trusted)
+  - Use certbot or similar tools for automated renewal
+  - Example with certbot:
+    ```bash
+    certbot certonly --standalone -d yourdomain.com
+    cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem docker/certs/cert.pem
+    cp /etc/letsencrypt/live/yourdomain.com/privkey.pem docker/certs/key.pem
+    ```
+- **Alternative**: Commercial CA (DigiCert, Sectigo, GlobalSign, etc.)
+- **Enterprise**: Internal PKI/CA infrastructure
+- **Important**: After installing trusted certificates, enable HSTS in `docker/nginx.conf`:
+  ```nginx
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  ```
+- **WARNING**: Do NOT enable HSTS with self-signed certificates - it will cause persistent browser issues
+
+#### Authentication and Authorization
+
+**API Token Security:**
+1. Generate a strong, random token:
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+2. Store in environment variables or secrets manager (never in code)
+3. Use different tokens for dev/staging/production
+4. Rotate tokens regularly (every 90 days recommended)
+5. Never commit `.env` files containing tokens
+
+**Basic Authentication:**
+1. Use strong passwords (minimum 12 characters, mixed case, numbers, symbols)
+2. Generate hashed passwords:
+   ```bash
+   ./scripts/mk-htpasswd.sh
+   # or for automated deployments
+   export NW_DIFF_BASIC_USER=admin
+   export NW_DIFF_BASIC_PASSWORD=your_strong_password
+   ./docker/nginx/init-certs-and-htpasswd.sh
+   ```
+3. **Never** commit `docker/.htpasswd` to version control (covered by `.gitignore`)
+4. Implement account lockout policies if possible (via nginx modules or WAF)
+
+**Device Credentials:**
+1. Store `DEVICE_PASSWORD` securely (secrets manager, encrypted vault)
+2. Use read-only accounts on network devices where possible
+3. Implement SSH key authentication instead of passwords when supported
+4. Rotate device credentials regularly
+
+#### Network Security
+
+1. **Firewall Configuration:**
+   - Restrict HTTPS (443) access to authorized networks/IPs
+   - Close HTTP (80) port if not needed (optional, redirects to HTTPS by default)
+   - Use VPN or bastion host for remote access
+   
+2. **Reverse Proxy Hardening:**
+   - The nginx configuration includes rate limiting by default
+   - Adjust rate limits in `docker/nginx.conf` based on your usage patterns:
      ```nginx
-     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+     limit_req_zone $binary_remote_addr zone=general:10m rate=10r/s;
+     limit_req_zone $binary_remote_addr zone=api:10m rate=5r/s;
      ```
-   - **WARNING**: Do NOT enable HSTS with self-signed certificates as it will cause browser issues
-5. **Regularly update base images** - Keep Docker images up-to-date for security patches
-6. **Review nginx logs** - Monitor for suspicious activity
-7. **Limit network exposure** - Use firewall rules to restrict access to trusted networks
+   - Consider adding WAF (Web Application Firewall) for additional protection
+
+3. **Container Security:**
+   - Run containers as non-root users where possible
+   - Use Docker secrets for sensitive data instead of environment variables
+   - Regularly scan container images for vulnerabilities:
+     ```bash
+     docker scan nw-diff:latest
+     ```
+
+#### Data Protection
+
+1. **Sensitive File Handling:**
+   - Verify `.gitignore` excludes: `docker/.htpasswd`, `docker/certs/`, `.env`, `hosts.csv`
+   - Store device inventory (`hosts.csv`) outside repository in production
+   - Use volume mounts for sensitive data:
+     ```bash
+     docker run -v /secure/path/hosts.csv:/app/hosts.csv:ro -e HOSTS_CSV=/app/hosts.csv ...
+     ```
+
+2. **Secrets Management:**
+   - Use environment-specific secrets (development vs. production)
+   - Consider using Docker secrets, Kubernetes secrets, or dedicated secrets managers (HashiCorp Vault, AWS Secrets Manager, etc.)
+   - Never log or expose secrets in error messages
+
+3. **Configuration Backups:**
+   - Encrypt backups of configuration data
+   - Store backups in secure, access-controlled locations
+   - Implement retention policies for compliance
+
+#### Monitoring and Auditing
+
+1. **Log Management:**
+   - Review nginx access/error logs regularly:
+     ```bash
+     docker-compose logs nginx | grep -E "40[134]|50[0-3]"
+     ```
+   - Monitor for suspicious activity: repeated 401/403 errors, unusual traffic patterns
+   - Consider centralized logging (ELK stack, Splunk, etc.)
+
+2. **Security Auditing:**
+   - Run regular security scans:
+     ```bash
+     pip-audit -r requirements.txt
+     docker scan nw-diff:latest
+     ```
+   - Review and update dependencies quarterly
+   - Subscribe to security advisories for Flask, nginx, and dependencies
+
+3. **Access Monitoring:**
+   - Log all capture operations and configuration changes
+   - Implement alerting for unauthorized access attempts
+   - Regular access reviews (who has credentials, tokens, etc.)
+
+#### Regular Maintenance
+
+1. **Updates:**
+   - Keep base Docker images updated: `docker-compose pull`
+   - Update Python dependencies: `pip install -r requirements.txt --upgrade`
+   - Monitor for security advisories and CVEs
+
+2. **Certificate Renewal:**
+   - Let's Encrypt certificates expire every 90 days - automate renewal
+   - Set calendar reminders for manual certificate renewals
+   - Test certificate validity regularly:
+     ```bash
+     openssl x509 -in docker/certs/cert.pem -noout -enddate
+     ```
+
+3. **Credential Rotation:**
+   - Rotate API tokens every 90 days
+   - Update Basic Auth passwords every 180 days
+   - Change device passwords according to organizational policy
+
+#### Production Deployment Checklist
+
+Before deploying to production, verify:
+
+- [ ] Using trusted TLS certificates (not self-signed)
+- [ ] HSTS header enabled in `docker/nginx.conf`
+- [ ] Strong, unique passwords for all authentication
+- [ ] API token generated and securely stored
+- [ ] `.env` file not committed to version control
+- [ ] `hosts.csv` stored outside repository or properly secured
+- [ ] Firewall rules configured to restrict access
+- [ ] Container images scanned for vulnerabilities
+- [ ] Logs are being collected and monitored
+- [ ] Backup strategy implemented and tested
+- [ ] Debug mode disabled (`APP_DEBUG=false`)
+- [ ] Running latest stable versions of all dependencies
+- [ ] Incident response plan documented
+
+#### Demo vs. Production Configurations
+
+**Demo/Development Environment:**
+- Self-signed certificates acceptable
+- HSTS disabled (commented out)
+- Basic Auth optional
+- Bind to `127.0.0.1` for local testing
+- Debug mode can be enabled temporarily
+- Less strict rate limiting
+
+**Production Environment:**
+- **Must use** trusted TLS certificates
+- **Must enable** HSTS header
+- **Must use** Basic Auth + API tokens
+- Bind to `0.0.0.0` only within containers (nginx proxy)
+- Debug mode **must be disabled**
+- Strict rate limiting and monitoring
+- Regular security audits and updates
+
+#### Reporting Security Issues
+
+If you discover a security vulnerability in NW-Diff:
+1. **Do NOT** open a public GitHub issue
+2. Email security concerns to repository maintainers privately
+3. Include detailed information: steps to reproduce, impact assessment
+4. Allow reasonable time for remediation before public disclosure
 
 ### Troubleshooting
 
