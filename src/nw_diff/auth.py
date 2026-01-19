@@ -25,7 +25,8 @@ from werkzeug.security import check_password_hash
 logger = logging.getLogger("nw-diff")
 
 
-def _verify_basic_auth(auth_header: str) -> bool:  # pylint: disable=too-many-return-statements
+# pylint: disable=too-many-return-statements
+def _verify_basic_auth(auth_header: str) -> bool:
     """
     Verify HTTP Basic authentication credentials.
 
