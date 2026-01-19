@@ -123,7 +123,7 @@ def test_basic_auth_hashed_password_wrong_password(monkeypatch) -> None:
 
 
 def test_basic_auth_prefers_hash_over_plain(monkeypatch) -> None:
-    """Test that hashed password is checked first when both are set."""
+    """Test that hashed password is used exclusively when configured."""
     password_hash = generate_password_hash("hashpass")
     monkeypatch.setenv("NW_DIFF_API_TOKEN", "test_token")
     monkeypatch.setenv("NW_DIFF_BASIC_USER", "admin")
@@ -138,12 +138,12 @@ def test_basic_auth_prefers_hash_over_plain(monkeypatch) -> None:
         )
         assert response.status_code != 401
 
-        # Should fail with plain password when hash doesn't match
+        # Should fail with plain password - no fallback when hash is configured
         response = client.get(
             "/api/logs",
             headers={"Authorization": _make_basic_auth_header("admin", "plainpass")},
         )
-        assert response.status_code != 401  # Falls back to plain password check
+        assert response.status_code == 401
 
 
 # --- Tests for Bearer token backward compatibility ---

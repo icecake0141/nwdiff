@@ -66,14 +66,15 @@ def _verify_basic_auth(auth_header: str) -> bool:  # pylint: disable=too-many-re
         if not expected_user or not hmac.compare_digest(username, expected_user):
             return False
 
-        # Verify password - try hash first, then plain (development fallback)
+        # Verify password - prefer hash over plain (development fallback)
         if password_hash:
-            # Production: verify against Werkzeug password hash
-            if check_password_hash(password_hash, password):
-                return True
+            # Production: verify against Werkzeug password hash only
+            # Do not fall back to plain password if hash is configured
+            return check_password_hash(password_hash, password)
 
         if plain_password:
             # Development fallback: verify against plain password
+            # Only used when password_hash is not configured
             if hmac.compare_digest(password, plain_password):
                 logger.warning(
                     "Basic auth succeeded with plain password - "
