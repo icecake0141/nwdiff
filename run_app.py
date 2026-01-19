@@ -27,8 +27,6 @@ sys.path.insert(0, str(src_dir))
 from nw_diff.app import app  # pylint: disable=wrong-import-position,import-error
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=5000,
-        debug=os.environ.get("APP_DEBUG", "").lower() == "true",
-    )
+    # Read debug mode from environment variable, default to False for security
+    debug_mode = os.environ.get("APP_DEBUG", "").lower() == "true"
+    app.run(debug=debug_mode)
