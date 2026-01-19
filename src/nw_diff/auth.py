@@ -12,21 +12,94 @@ This file was created or modified with the assistance of an AI (Large Language M
 Review required for correctness, security, and licensing.
 """
 
+import base64
+import binascii
 import hmac
 import logging
 import os
 from functools import wraps
 
 from flask import jsonify, request
+from werkzeug.security import check_password_hash
 
 logger = logging.getLogger("nw-diff")
+
+
+def _verify_basic_auth(auth_header: str) -> bool:  # pylint: disable=too-many-return-statements
+    """
+    Verify HTTP Basic authentication credentials.
+
+    Args:
+        auth_header: The Authorization header value (e.g., "Basic base64string")
+
+    Returns:
+        True if credentials are valid, False otherwise
+    """
+    try:
+        # Extract base64-encoded credentials
+        if not auth_header.startswith("Basic ") or len(auth_header) < 7:
+            return False
+
+        encoded_credentials = auth_header[6:]  # Remove "Basic " prefix
+
+        # Decode base64
+        try:
+            decoded_bytes = base64.b64decode(encoded_credentials)
+            decoded_str = decoded_bytes.decode("utf-8")
+        except (binascii.Error, UnicodeDecodeError):
+            logger.warning("Failed to decode Basic auth credentials")
+            return False
+
+        # Parse username:password
+        if ":" not in decoded_str:
+            logger.warning("Invalid Basic auth format - missing colon separator")
+            return False
+
+        username, password = decoded_str.split(":", 1)
+
+        # Get expected credentials from environment
+        expected_user = os.environ.get("NW_DIFF_BASIC_USER")
+        password_hash = os.environ.get("NW_DIFF_BASIC_PASSWORD_HASH")
+        plain_password = os.environ.get("NW_DIFF_BASIC_PASSWORD")
+
+        # Verify username with timing-safe comparison
+        if not expected_user or not hmac.compare_digest(username, expected_user):
+            return False
+
+        # Verify password - try hash first, then plain (development fallback)
+        if password_hash:
+            # Production: verify against Werkzeug password hash
+            if check_password_hash(password_hash, password):
+                return True
+
+        if plain_password:
+            # Development fallback: verify against plain password
+            if hmac.compare_digest(password, plain_password):
+                logger.warning(
+                    "Basic auth succeeded with plain password - "
+                    "use hashed password in production"
+                )
+                return True
+
+        return False
+
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        logger.error("Error verifying Basic auth: %s", str(e))
+        return False
 
 
 def require_api_token(f):
     """
     Decorator to require API token authentication for sensitive endpoints.
-    Token is checked from Authorization: Bearer <token> header.
+    Supports both Bearer token and HTTP Basic authentication.
+
+    Bearer token: Authorization: Bearer <token>
+    Basic auth: Authorization: Basic <base64(user:pass)>
+
     The expected token is read from NW_DIFF_API_TOKEN environment variable.
+    Basic auth credentials are verified against NW_DIFF_BASIC_USER and
+    NW_DIFF_BASIC_PASSWORD_HASH (or NW_DIFF_BASIC_PASSWORD for development).
+
     Returns 401 for missing or invalid tokens without leaking internal details.
     """
 
@@ -52,27 +125,36 @@ def require_api_token(f):
             )
             return jsonify({"error": "Authentication required"}), 401
 
-        # Check for Bearer token format with at least one character after
-        # "Bearer " is 7 characters, so we need at least 8 characters total
-        if not auth_header.startswith("Bearer ") or len(auth_header) < 8:
-            logger.warning(
-                "Unauthorized access attempt to %s - invalid Authorization format",
-                request.path,
-            )
-            return jsonify({"error": "Authentication required"}), 401
+        # Try Bearer token authentication
+        if auth_header.startswith("Bearer "):
+            # Check for Bearer token format with at least one character after
+            # "Bearer " is 7 characters, so we need at least 8 characters total
+            if len(auth_header) < 8:
+                logger.warning(
+                    "Unauthorized access attempt to %s - invalid Authorization format",
+                    request.path,
+                )
+                return jsonify({"error": "Authentication required"}), 401
 
-        # Extract token (everything after "Bearer ")
-        token = auth_header[7:]  # Remove "Bearer " prefix
+            # Extract token (everything after "Bearer ")
+            token = auth_header[7:]  # Remove "Bearer " prefix
 
-        # Use constant-time comparison to prevent timing attacks
-        # hmac.compare_digest safely handles tokens of different lengths
-        if not hmac.compare_digest(token, expected_token):
-            logger.warning(
-                "Unauthorized access attempt to %s - invalid token", request.path
-            )
-            return jsonify({"error": "Authentication required"}), 401
+            # Use constant-time comparison to prevent timing attacks
+            # hmac.compare_digest safely handles tokens of different lengths
+            if hmac.compare_digest(token, expected_token):
+                # Token is valid, proceed with the request
+                return f(*args, **kwargs)
 
-        # Token is valid, proceed with the request
-        return f(*args, **kwargs)
+        # Try Basic authentication as fallback
+        elif auth_header.startswith("Basic "):
+            if _verify_basic_auth(auth_header):
+                # Basic auth is valid, proceed with the request
+                return f(*args, **kwargs)
+
+        # All authentication methods failed
+        logger.warning(
+            "Unauthorized access attempt to %s - invalid credentials", request.path
+        )
+        return jsonify({"error": "Authentication required"}), 401
 
     return decorated_function
