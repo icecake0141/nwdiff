@@ -25,10 +25,10 @@ from pathlib import Path
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.append(str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-import app  # pylint: disable=wrong-import-position,import-error
 from nw_diff import (  # pylint: disable=wrong-import-position
+    app,
     security,
     storage,
     diff,

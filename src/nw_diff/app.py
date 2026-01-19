@@ -15,6 +15,7 @@ Review required for correctness, security, and licensing.
 
 import os
 import re
+from pathlib import Path
 
 from flask import (
     Flask,
@@ -48,7 +49,11 @@ from nw_diff.devices import (
     get_commands_for_host,
 )
 
-app = Flask(__name__)
+# Determine project root directory (two levels up from this file)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+TEMPLATE_DIR = PROJECT_ROOT / "templates"
+
+app = Flask(__name__, template_folder=str(TEMPLATE_DIR))
 
 
 # --- Capture endpoint for individual host ---
