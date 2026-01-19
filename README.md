@@ -174,6 +174,7 @@ NW-Diff supports containerized deployment with HTTPS (TLS termination) and optio
    ```bash
    ./scripts/mk-certs.sh
    # Follow prompts to generate certificates
+   # Or specify hostname: CERT_HOSTNAME=myserver.example.com ./scripts/docker-setup.sh
    ```
 
 4. **Generate Basic Authentication credentials:**
@@ -283,6 +284,12 @@ docker run --rm -v nw-diff-logs:/data -v $(pwd):/backup alpine tar xzf /backup/n
 2. **Use strong passwords** - Both for Basic Auth and device credentials
 3. **Keep API tokens secure** - Store `NW_DIFF_API_TOKEN` securely, never commit to version control
 4. **Use trusted certificates in production** - Self-signed certificates are for development only
+   - For production: Obtain certificates from Let's Encrypt, a commercial CA, or your organization's PKI
+   - **IMPORTANT**: When using trusted certificates, enable HSTS by uncommenting the line in `docker/nginx.conf`:
+     ```nginx
+     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+     ```
+   - **WARNING**: Do NOT enable HSTS with self-signed certificates as it will cause browser issues
 5. **Regularly update base images** - Keep Docker images up-to-date for security patches
 6. **Review nginx logs** - Monitor for suspicious activity
 7. **Limit network exposure** - Use firewall rules to restrict access to trusted networks

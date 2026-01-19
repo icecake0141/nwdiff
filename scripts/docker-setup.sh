@@ -68,10 +68,12 @@ fi
 # Generate TLS certificates
 if [ ! -f docker/certs/cert.pem ] || [ ! -f docker/certs/key.pem ]; then
     echo "Generating self-signed TLS certificates..."
+    # Allow hostname override via environment variable
+    CERT_HOSTNAME=${CERT_HOSTNAME:-localhost}
     bash scripts/mk-certs.sh <<EOF
-localhost
+$CERT_HOSTNAME
 EOF
-    echo "✓ Generated TLS certificates"
+    echo "✓ Generated TLS certificates for $CERT_HOSTNAME"
 else
     echo "✓ TLS certificates already exist"
 fi
