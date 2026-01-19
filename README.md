@@ -71,19 +71,19 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
      ```bash
      export NW_DIFF_BASIC_USER=your_username
      ```
-     
+
      For **production**, use a hashed password (recommended):
      ```bash
      # Generate password hash using Python
      python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your_password'))"
      export NW_DIFF_BASIC_PASSWORD_HASH='<generated_hash>'
      ```
-     
+
      For **development only**, you can use a plain password (not recommended for production):
      ```bash
      export NW_DIFF_BASIC_PASSWORD=your_plain_password
      ```
-     
+
      **Note:** Basic Authentication is only enforced when `NW_DIFF_API_TOKEN` is set. Both Bearer token (`Authorization: Bearer <token>`) and Basic auth (`Authorization: Basic <base64(user:pass)>`) will be accepted for protected endpoints.
 
    - **(Optional) Set the `HOSTS_CSV` environment variable** to specify a custom location for the hosts inventory file:
