@@ -15,6 +15,7 @@ Review required for correctness, security, and licensing.
 Simple wrapper script to run the NW-Diff application.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -22,12 +23,12 @@ from pathlib import Path
 src_dir = Path(__file__).parent / "src"
 sys.path.insert(0, str(src_dir))
 
-# Import and run the app
-from nw_diff import app
+# Import the Flask app
+from nw_diff.app import app  # pylint: disable=wrong-import-position,import-error
 
 if __name__ == "__main__":
-    app.app.run(
+    app.run(
         host="0.0.0.0",
         port=5000,
-        debug=app.os.environ.get("APP_DEBUG", "").lower() == "true",
+        debug=os.environ.get("APP_DEBUG", "").lower() == "true",
     )
