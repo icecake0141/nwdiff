@@ -88,7 +88,11 @@ By default, the application runs with Flask debug mode **disabled** for security
 
 1. **Run the Application:**
    ```bash
-   python app.py
+   python run_app.py
+   ```
+   Or directly from the source:
+   ```bash
+   PYTHONPATH=src python -m nw_diff.app
    ```
 2. **Access the Application:**
    Open your browser and navigate to [http://localhost:5000](http://localhost:5000).
@@ -100,11 +104,11 @@ For local development, you can enable debug mode by setting the `APP_DEBUG` envi
 1. **Run with Debug Mode:**
    ```bash
    export APP_DEBUG=true
-   python app.py
+   python run_app.py
    ```
    Or run it inline:
    ```bash
-   APP_DEBUG=true python app.py
+   APP_DEBUG=true python run_app.py
    ```
 2. **Access the Application:**
    Open your browser and navigate to [http://localhost:5000](http://localhost:5000).
@@ -156,9 +160,9 @@ The computed diff HTML files are stored in the `diff` directory for offline view
 
 3. **Format, lint, type check, and test:**
    ```bash
-   black app.py tests nw_diff
-   pylint app.py tests nw_diff
-   mypy app.py nw_diff tests
+   black src tests
+   pylint src tests
+   mypy src tests
    pytest
    ```
 
