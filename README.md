@@ -312,6 +312,14 @@ docker run --rm -v nw-diff-logs:/data -v $(pwd):/backup alpine tar xzf /backup/n
 - Ensure certificate files have correct permissions (cert.pem: 644, key.pem: 600)
 - Check volume permissions: `docker-compose exec nw-diff ls -la /app`
 
+**Docker build SSL certificate errors:**
+- If building in a corporate/CI environment with SSL interception, use:
+  ```bash
+  docker build --build-arg SKIP_PIP_SSL_VERIFY=1 -t nw-diff:latest .
+  ```
+- This adds `--trusted-host` flags for PyPI domains during pip install
+- **Note:** Only use this workaround in trusted environments; it bypasses SSL verification
+
 ## Development
 
 1. **Install development dependencies:**

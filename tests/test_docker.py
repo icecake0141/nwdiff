@@ -198,7 +198,12 @@ def test_docker_compose_has_networks() -> None:
     reason="Docker not available",
 )
 def test_dockerfile_builds_successfully() -> None:
-    """Test that Dockerfile builds successfully."""
+    """Test that Dockerfile builds successfully.
+
+    In CI environments with SSL interception, the build may require
+    SKIP_PIP_SSL_VERIFY=1 to bypass certificate verification.
+    """
+    # Try building without SSL workaround first
     result = subprocess.run(
         ["docker", "build", "-t", "nw-diff:test", "."],
         cwd=PROJECT_ROOT,
@@ -207,6 +212,26 @@ def test_dockerfile_builds_successfully() -> None:
         timeout=300,
         check=False,
     )
+
+    # If build failed due to SSL issues, retry with workaround
+    if result.returncode != 0 and "SSL" in result.stderr:
+        result = subprocess.run(
+            [
+                "docker",
+                "build",
+                "--build-arg",
+                "SKIP_PIP_SSL_VERIFY=1",
+                "-t",
+                "nw-diff:test",
+                ".",
+            ],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+
     assert result.returncode == 0, f"Docker build failed: {result.stderr}"
 
 

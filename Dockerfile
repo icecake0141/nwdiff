@@ -16,14 +16,29 @@ FROM python:3.11-slim AS builder
 # Set working directory
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies and CA certificates for SSL
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-ca-certificates
 
 # Copy requirements first for better caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Install Python packages
+# Note: In CI environments with SSL interception, you may need to build with:
+# docker build --build-arg SKIP_PIP_SSL_VERIFY=1 ...
+ARG SKIP_PIP_SSL_VERIFY=""
+RUN if [ -n "$SKIP_PIP_SSL_VERIFY" ]; then \
+        pip install --no-cache-dir --user \
+            --trusted-host pypi.org \
+            --trusted-host files.pythonhosted.org \
+            --trusted-host pypi.python.org \
+            -r requirements.txt; \
+    else \
+        pip install --no-cache-dir --user -r requirements.txt; \
+    fi
 
 # Production stage
 FROM python:3.11-slim
