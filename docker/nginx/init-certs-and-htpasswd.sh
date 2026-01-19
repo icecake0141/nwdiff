@@ -191,6 +191,7 @@ log_info "Running final validation checks..."
 
 # Check certificate permissions
 if [ -f "$CERT_FILE" ]; then
+    # Cross-platform stat: -c for Linux/GNU, -f for macOS/BSD
     CERT_PERMS=$(stat -c "%a" "$CERT_FILE" 2>/dev/null || stat -f "%OLp" "$CERT_FILE" 2>/dev/null)
     if [ "$CERT_PERMS" != "644" ]; then
         log_warn "Certificate file has permissions $CERT_PERMS (expected 644)"
@@ -199,6 +200,7 @@ if [ -f "$CERT_FILE" ]; then
 fi
 
 if [ -f "$KEY_FILE" ]; then
+    # Cross-platform stat: -c for Linux/GNU, -f for macOS/BSD
     KEY_PERMS=$(stat -c "%a" "$KEY_FILE" 2>/dev/null || stat -f "%OLp" "$KEY_FILE" 2>/dev/null)
     if [ "$KEY_PERMS" != "600" ]; then
         log_warn "Private key has permissions $KEY_PERMS (expected 600)"

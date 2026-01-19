@@ -215,14 +215,19 @@ def test_nginx_conf_enforces_modern_tls() -> None:
     # Look for the actual directive, not comments
     ssl_protocols_match = re.search(r"ssl_protocols\s+([^;]+);", content)
     assert ssl_protocols_match, "nginx.conf should have ssl_protocols directive"
-    protocols = ssl_protocols_match.group(1)
-    assert "TLSv1.2" in protocols, "ssl_protocols should include TLSv1.2"
-    assert "TLSv1.3" in protocols, "ssl_protocols should include TLSv1.3"
-    # Ensure old versions are not in the actual directive
-    assert "TLSv1.1" not in protocols, "ssl_protocols should not include TLSv1.1"
-    assert (
-        protocols.count("TLSv1") == 2
-    ), "ssl_protocols should only include TLSv1.2 and TLSv1.3"
+    protocols = ssl_protocols_match.group(1).strip()
+
+    # Verify exactly TLSv1.2 and TLSv1.3 are present using regex
+    assert re.search(r"\bTLSv1\.2\b", protocols), "ssl_protocols should include TLSv1.2"
+    assert re.search(r"\bTLSv1\.3\b", protocols), "ssl_protocols should include TLSv1.3"
+
+    # Ensure old versions are not in the actual directive using word boundaries
+    assert not re.search(
+        r"\bTLSv1\.1\b", protocols
+    ), "ssl_protocols should not include TLSv1.1"
+    assert not re.search(
+        r"\bTLSv1\.0\b|\bTLSv1\b(?!\.\d)", protocols
+    ), "ssl_protocols should not include TLSv1.0"
 
 
 def test_nginx_conf_has_strong_ciphers() -> None:
