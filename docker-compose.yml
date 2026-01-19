@@ -21,6 +21,8 @@ services:
       - NW_DIFF_API_TOKEN=${NW_DIFF_API_TOKEN}
       - HOSTS_CSV=/app/hosts.csv
       - APP_DEBUG=false
+      - FLASK_RUN_HOST=0.0.0.0
+      - FLASK_RUN_PORT=5000
     volumes:
       # Mount hosts.csv from a secure location
       - ./hosts.csv:/app/hosts.csv:ro

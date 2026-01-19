@@ -27,6 +27,17 @@ sys.path.insert(0, str(src_dir))
 from nw_diff.app import app  # pylint: disable=wrong-import-position,import-error
 
 if __name__ == "__main__":
+    # Import logger after module is loaded
+    from nw_diff.logging_config import logger  # pylint: disable=import-outside-toplevel
+
     # Read debug mode from environment variable, default to False for security
     debug_mode = os.environ.get("APP_DEBUG", "").lower() == "true"
-    app.run(debug=debug_mode)
+
+    # Read host and port from environment variables
+    # Default to 127.0.0.1 for dev/single-user safety
+    # Set FLASK_RUN_HOST=0.0.0.0 in container environments for network accessibility
+    host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
+    port = int(os.environ.get("FLASK_RUN_PORT", "5000"))
+
+    logger.info("Starting Flask app on %s:%d (debug=%s)", host, port, debug_mode)
+    app.run(host=host, port=port, debug=debug_mode)

@@ -27,6 +27,7 @@ from flask import (
     url_for,
 )
 from netmiko import ConnectHandler
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Import from nw_diff modules
 from nw_diff.logging_config import logger
@@ -54,6 +55,18 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TEMPLATE_DIR = PROJECT_ROOT / "templates"
 
 app = Flask(__name__, template_folder=str(TEMPLATE_DIR))
+
+# Apply ProxyFix middleware to handle X-Forwarded-* headers from reverse proxy
+# This ensures correct URL generation, HTTPS detection, and client IP logging
+# when running behind nginx or other reverse proxies
+# x_for=1: Trust one proxy for X-Forwarded-For (client IP)
+# x_proto=1: Trust one proxy for X-Forwarded-Proto (HTTP/HTTPS)
+# x_host=1: Trust one proxy for X-Forwarded-Host (original host)
+# x_port=1: Trust one proxy for X-Forwarded-Port (original port)
+# x_prefix=1: Trust one proxy for X-Forwarded-Prefix (URL prefix)
+app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
+    app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1
+)
 
 
 # --- Capture endpoint for individual host ---
@@ -220,15 +233,15 @@ def host_list():
     hosts = []
     rows = read_hosts_csv()  # CSV reading ignores comment lines
     for row in rows:
-        host = row["host"]
+        hostname = row["host"]
         ip = row["ip"]
-        commands = get_commands_for_host(host)
+        commands = get_commands_for_host(hostname)
         origin_info = []
         dest_info = []
         diff_info = []
         for command in commands:
-            origin_path = get_file_path(host, command, "origin")
-            dest_path = get_file_path(host, command, "dest")
+            origin_path = get_file_path(hostname, command, "origin")
+            dest_path = get_file_path(hostname, command, "dest")
             origin_info.append(
                 {"command": command, "mtime": get_file_mtime(origin_path)}
             )
@@ -244,7 +257,7 @@ def host_list():
             diff_info.append({"command": command, "status": status})
         hosts.append(
             {
-                "host": host,
+                "host": hostname,
                 "ip": ip,
                 "origin_info": origin_info,
                 "dest_info": dest_info,
@@ -733,4 +746,12 @@ def logs_api():
 if __name__ == "__main__":
     # Read debug mode from environment variable, default to False for security
     debug_mode = os.environ.get("APP_DEBUG", "false").lower() in {"true", "1", "yes"}
-    app.run(debug=debug_mode)
+
+    # Read host and port from environment variables
+    # Default to 127.0.0.1 for dev/single-user safety
+    # Set FLASK_RUN_HOST=0.0.0.0 in container environments for network accessibility
+    host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
+    port = int(os.environ.get("FLASK_RUN_PORT", "5000"))
+
+    logger.info("Starting Flask app on %s:%d (debug=%s)", host, port, debug_mode)
+    app.run(host=host, port=port, debug=debug_mode)

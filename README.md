@@ -101,9 +101,18 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
 
 ## Usage
 
+### Running Modes Overview
+
+The application supports two primary running modes:
+
+1. **Local Development Mode**: Binds to `127.0.0.1:5000` (localhost only) for single-user development and testing. This is the secure default.
+2. **Container/Production Mode**: Binds to `0.0.0.0:5000` to allow access from the container network or reverse proxy (nginx). Required for Docker deployments.
+
+The application includes **ProxyFix middleware** to correctly handle `X-Forwarded-*` headers from reverse proxies (nginx, etc.), ensuring proper URL generation, HTTPS detection, and client IP logging when deployed behind a proxy.
+
 ### Running in Production Mode (Default)
 
-By default, the application runs with Flask debug mode **disabled** for security:
+By default, the application runs with Flask debug mode **disabled** for security and binds to **127.0.0.1** (localhost only):
 
 1. **Run the Application:**
    ```bash
@@ -133,6 +142,28 @@ For local development, you can enable debug mode by setting the `APP_DEBUG` envi
    Open your browser and navigate to [http://localhost:5000](http://localhost:5000).
 
 **Note:** Debug mode should **never** be enabled in production environments as it can expose sensitive information and create security vulnerabilities.
+
+### Customizing Bind Host and Port
+
+You can customize the bind host and port using environment variables:
+
+- `FLASK_RUN_HOST`: Host to bind to (default: `127.0.0.1` for local dev)
+- `FLASK_RUN_PORT`: Port to bind to (default: `5000`)
+
+**Examples:**
+
+```bash
+# Bind to all interfaces (useful for container environments)
+FLASK_RUN_HOST=0.0.0.0 python run_app.py
+
+# Use a different port
+FLASK_RUN_PORT=8080 python run_app.py
+
+# Combine multiple settings
+FLASK_RUN_HOST=0.0.0.0 FLASK_RUN_PORT=8080 APP_DEBUG=false python run_app.py
+```
+
+**Security Note:** When running locally without a reverse proxy, use the default `127.0.0.1` to prevent unauthorized network access. Only use `0.0.0.0` in container environments or when behind a properly configured reverse proxy with authentication.
 
 ### Interacting with Endpoints
 
@@ -176,6 +207,14 @@ The computed diff HTML files are stored in the `diff` directory for offline view
 ## Docker Deployment
 
 NW-Diff supports containerized deployment with HTTPS (TLS termination) and optional Basic Authentication via Docker and docker-compose. This provides a secure, production-ready deployment option.
+
+**Architecture Overview:**
+- **nginx**: Acts as a reverse proxy with TLS termination, sets `X-Forwarded-*` headers
+- **Flask app**: Runs with ProxyFix middleware to correctly interpret forwarded headers
+- **Container binding**: Flask binds to `0.0.0.0:5000` inside the container (set via `FLASK_RUN_HOST`)
+- **Network isolation**: Only nginx is exposed to the host; Flask app is accessible only within the Docker network
+
+The ProxyFix middleware ensures that the Flask app correctly detects the original request protocol (HTTPS), host, and client IP when running behind the nginx reverse proxy.
 
 ### Prerequisites
 
