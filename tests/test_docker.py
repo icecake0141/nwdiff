@@ -16,11 +16,11 @@ Integration tests for Docker deployment with HTTPS and Basic Authentication.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -84,9 +84,7 @@ def test_init_script_has_llm_attribution() -> None:
     """Verify init script contains LLM attribution comment."""
     init_script = PROJECT_ROOT / "docker" / "nginx" / "init-certs-and-htpasswd.sh"
     content = init_script.read_text(encoding="utf-8")
-    assert (
-        "Large Language Model" in content
-    ), "init script should have LLM attribution"
+    assert "Large Language Model" in content, "init script should have LLM attribution"
 
 
 def test_init_script_has_security_warnings() -> None:
@@ -204,9 +202,7 @@ def test_nginx_conf_has_hsts_documentation() -> None:
     assert (
         "self-signed" in content.lower()
     ), "nginx.conf should warn about self-signed certificates"
-    assert (
-        "production" in content.lower()
-    ), "nginx.conf should have production guidance"
+    assert "production" in content.lower(), "nginx.conf should have production guidance"
 
 
 def test_nginx_conf_enforces_modern_tls() -> None:
@@ -217,7 +213,6 @@ def test_nginx_conf_enforces_modern_tls() -> None:
     assert "TLSv1.3" in content, "nginx.conf should support TLSv1.3"
     # Check that the ssl_protocols directive only includes modern versions
     # Look for the actual directive, not comments
-    import re
     ssl_protocols_match = re.search(r"ssl_protocols\s+([^;]+);", content)
     assert ssl_protocols_match, "nginx.conf should have ssl_protocols directive"
     protocols = ssl_protocols_match.group(1)
