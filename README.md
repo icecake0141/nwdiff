@@ -67,6 +67,25 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
 
      **Important:** If `NW_DIFF_API_TOKEN` is not set, sensitive endpoints will be accessible without authentication (not recommended for production).
 
+   - **(Optional) Configure HTTP Basic Authentication** for browser-based access to protected endpoints:
+     ```bash
+     export NW_DIFF_BASIC_USER=your_username
+     ```
+
+     For **production**, use a hashed password (recommended):
+     ```bash
+     # Generate password hash using Python
+     python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your_password'))"
+     export NW_DIFF_BASIC_PASSWORD_HASH='<generated_hash>'
+     ```
+
+     For **development only**, you can use a plain password (not recommended for production):
+     ```bash
+     export NW_DIFF_BASIC_PASSWORD=your_plain_password
+     ```
+
+     **Note:** Basic Authentication is only enforced when `NW_DIFF_API_TOKEN` is set. Both Bearer token (`Authorization: Bearer <token>`) and Basic auth (`Authorization: Basic <base64(user:pass)>`) will be accepted for protected endpoints.
+
    - **(Optional) Set the `HOSTS_CSV` environment variable** to specify a custom location for the hosts inventory file:
      ```bash
      export HOSTS_CSV=/path/to/hosts.csv
@@ -123,7 +142,7 @@ For local development, you can enable debug mode by setting the `APP_DEBUG` envi
 - **Compare Files:** `/compare_files`
 
 #### Protected Endpoints (Require Authentication)
-The following endpoints require authentication via the `Authorization: Bearer <token>` header:
+The following endpoints require authentication when `NW_DIFF_API_TOKEN` is set. Both Bearer token and Basic authentication are supported:
 - **Capture Data:**
   - For origin data: `/capture/origin/<hostname>`
   - For destination data: `/capture/dest/<hostname>`
@@ -135,10 +154,18 @@ The following endpoints require authentication via the `Authorization: Bearer <t
   - HTML export: `/export/<hostname>`
   - JSON API: `/api/export/<hostname>`
 
-**Example using curl:**
+**Example using curl with Bearer token:**
 ```bash
 curl -H "Authorization: Bearer your_token_here" http://localhost:5000/api/logs
 ```
+
+**Example using curl with Basic authentication:**
+```bash
+curl -u username:password http://localhost:5000/api/logs
+```
+
+**Example using browser:**
+When accessing protected endpoints in a browser, you'll be prompted for username and password if Basic Authentication is configured. The browser will automatically encode credentials as Basic auth headers.
 
 **Note:** If `NW_DIFF_API_TOKEN` is not set, these endpoints will work without authentication (not recommended for production).
 
@@ -216,8 +243,18 @@ Set these in your `.env` file:
 
 - `DEVICE_PASSWORD`: Password for SSH connections to network devices
 - `NW_DIFF_API_TOKEN`: Secure token for API authentication (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+- `NW_DIFF_BASIC_USER`: (Optional) Username for HTTP Basic Authentication
+- `NW_DIFF_BASIC_PASSWORD_HASH`: (Optional) Hashed password for Basic Authentication (generate with `python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('password'))"`)
+- `NW_DIFF_BASIC_PASSWORD`: (Optional) Plain password for Basic Authentication (development only - use hashed password in production)
 - `APP_DEBUG`: Set to `false` in production (default)
 - `HOSTS_CSV`: Optional custom path to hosts inventory file
+
+**Authentication Modes:**
+- If `NW_DIFF_API_TOKEN` is not set: No authentication required (legacy mode)
+- If `NW_DIFF_API_TOKEN` is set:
+  - API clients can use Bearer token: `Authorization: Bearer <token>`
+  - Browser users can use Basic auth: `Authorization: Basic <base64(user:pass)>`
+  - Both methods are accepted for protected endpoints (capture, logs, export)
 
 #### TLS/SSL Certificates
 
