@@ -16,9 +16,7 @@ Integration tests for Docker deployment with HTTPS and Basic Authentication.
 
 from __future__ import annotations
 
-import base64
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
@@ -74,25 +72,23 @@ def test_dockerfile_has_license_header() -> None:
     dockerfile = PROJECT_ROOT / "Dockerfile"
     content = dockerfile.read_text(encoding="utf-8")
     assert "Apache-2.0" in content, "Dockerfile should have Apache-2.0 license"
-    assert "SPDX-License-Identifier" in content, "Dockerfile should have SPDX identifier"
+    assert (
+        "SPDX-License-Identifier" in content
+    ), "Dockerfile should have SPDX identifier"
 
 
 def test_dockerfile_has_llm_attribution() -> None:
     """Verify Dockerfile contains LLM attribution comment."""
     dockerfile = PROJECT_ROOT / "Dockerfile"
     content = dockerfile.read_text(encoding="utf-8")
-    assert (
-        "Large Language Model" in content
-    ), "Dockerfile should have LLM attribution"
+    assert "Large Language Model" in content, "Dockerfile should have LLM attribution"
 
 
 def test_docker_compose_has_license_header() -> None:
     """Verify docker-compose.yml contains proper license header."""
     compose_file = PROJECT_ROOT / "docker-compose.yml"
     content = compose_file.read_text(encoding="utf-8")
-    assert (
-        "Apache-2.0" in content
-    ), "docker-compose.yml should have Apache-2.0 license"
+    assert "Apache-2.0" in content, "docker-compose.yml should have Apache-2.0 license"
     assert (
         "SPDX-License-Identifier" in content
     ), "docker-compose.yml should have SPDX identifier"
@@ -128,7 +124,9 @@ def test_nginx_conf_has_tls_config() -> None:
         "ssl_certificate_key" in content
     ), "nginx.conf should have ssl_certificate_key"
     assert "listen 443 ssl" in content, "nginx.conf should listen on port 443 with SSL"
-    assert "TLSv1.2" in content or "TLSv1.3" in content, "nginx.conf should specify TLS versions"
+    assert (
+        "TLSv1.2" in content or "TLSv1.3" in content
+    ), "nginx.conf should specify TLS versions"
 
 
 def test_nginx_conf_has_http_to_https_redirect() -> None:
@@ -136,18 +134,14 @@ def test_nginx_conf_has_http_to_https_redirect() -> None:
     nginx_conf = PROJECT_ROOT / "docker" / "nginx.conf"
     content = nginx_conf.read_text(encoding="utf-8")
     assert "listen 80" in content, "nginx.conf should listen on port 80"
-    assert (
-        "return 301 https://" in content
-    ), "nginx.conf should redirect HTTP to HTTPS"
+    assert "return 301 https://" in content, "nginx.conf should redirect HTTP to HTTPS"
 
 
 def test_nginx_conf_has_security_headers() -> None:
     """Verify nginx.conf includes security headers."""
     nginx_conf = PROJECT_ROOT / "docker" / "nginx.conf"
     content = nginx_conf.read_text(encoding="utf-8")
-    assert (
-        "X-Frame-Options" in content
-    ), "nginx.conf should set X-Frame-Options header"
+    assert "X-Frame-Options" in content, "nginx.conf should set X-Frame-Options header"
     assert (
         "X-Content-Type-Options" in content
     ), "nginx.conf should set X-Content-Type-Options header"
@@ -160,7 +154,9 @@ def test_dockerfile_uses_non_root_user() -> None:
     """Verify Dockerfile creates and uses a non-root user."""
     dockerfile = PROJECT_ROOT / "Dockerfile"
     content = dockerfile.read_text(encoding="utf-8")
-    assert "useradd" in content or "adduser" in content, "Dockerfile should create a user"
+    assert (
+        "useradd" in content or "adduser" in content
+    ), "Dockerfile should create a user"
     assert "USER" in content, "Dockerfile should switch to non-root user"
 
 
@@ -197,7 +193,8 @@ def test_docker_compose_has_networks() -> None:
 
 
 @pytest.mark.skipif(
-    subprocess.run(["which", "docker"], capture_output=True).returncode != 0,
+    subprocess.run(["which", "docker"], capture_output=True, check=False).returncode
+    != 0,
     reason="Docker not available",
 )
 def test_dockerfile_builds_successfully() -> None:
@@ -208,6 +205,7 @@ def test_dockerfile_builds_successfully() -> None:
         capture_output=True,
         text=True,
         timeout=300,
+        check=False,
     )
     assert result.returncode == 0, f"Docker build failed: {result.stderr}"
 
