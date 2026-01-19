@@ -146,6 +146,180 @@ curl -H "Authorization: Bearer your_token_here" http://localhost:5000/api/logs
 
 The computed diff HTML files are stored in the `diff` directory for offline viewing.
 
+## Docker Deployment
+
+NW-Diff supports containerized deployment with HTTPS (TLS termination) and optional Basic Authentication via Docker and docker-compose. This provides a secure, production-ready deployment option.
+
+### Prerequisites
+
+- Docker and Docker Compose installed
+- OpenSSL (for generating self-signed certificates)
+- Apache Utils (for generating htpasswd file) - `apt-get install apache2-utils` or `yum install httpd-tools`
+
+### Quick Start
+
+1. **Clone the repository and navigate to project directory:**
+   ```bash
+   git clone https://github.com/icecake0141/nw-diff.git
+   cd nw-diff
+   ```
+
+2. **Set up environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env and set DEVICE_PASSWORD and NW_DIFF_API_TOKEN
+   ```
+
+3. **Generate TLS certificates (self-signed for development):**
+   ```bash
+   ./scripts/mk-certs.sh
+   # Follow prompts to generate certificates
+   # Or specify hostname: CERT_HOSTNAME=myserver.example.com ./scripts/docker-setup.sh
+   ```
+
+4. **Generate Basic Authentication credentials:**
+   ```bash
+   ./scripts/mk-htpasswd.sh
+   # Follow prompts to create username/password
+   ```
+
+5. **Create hosts.csv inventory file:**
+   ```bash
+   cp hosts.csv.sample hosts.csv
+   # Edit hosts.csv with your device information
+   ```
+
+6. **Start the application stack:**
+   ```bash
+   docker-compose up -d
+   ```
+
+7. **Access the application:**
+   - HTTPS: `https://localhost/` (you'll need to accept the self-signed certificate warning)
+   - You'll be prompted for Basic Auth credentials
+
+8. **View logs:**
+   ```bash
+   docker-compose logs -f
+   ```
+
+9. **Stop the application:**
+   ```bash
+   docker-compose down
+   ```
+
+### Configuration
+
+#### Environment Variables
+
+Set these in your `.env` file:
+
+- `DEVICE_PASSWORD`: Password for SSH connections to network devices
+- `NW_DIFF_API_TOKEN`: Secure token for API authentication (generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
+- `APP_DEBUG`: Set to `false` in production (default)
+- `HOSTS_CSV`: Optional custom path to hosts inventory file
+
+#### TLS/SSL Certificates
+
+For **development/testing**, use the provided script to generate self-signed certificates:
+```bash
+./scripts/mk-certs.sh
+```
+
+For **production**, you should:
+- Use certificates from a trusted Certificate Authority (CA), or
+- Use Let's Encrypt with Caddy or certbot, or
+- Mount your existing certificates:
+  ```bash
+  # Place your certificates in docker/certs/
+  cp /path/to/your/cert.pem docker/certs/cert.pem
+  cp /path/to/your/key.pem docker/certs/key.pem
+  chmod 644 docker/certs/cert.pem
+  chmod 600 docker/certs/key.pem
+  ```
+
+#### Basic Authentication
+
+Basic Authentication is enabled by default for all endpoints. To manage users:
+
+**Add a user:**
+```bash
+./scripts/mk-htpasswd.sh
+```
+
+**Add additional users:**
+```bash
+htpasswd docker/.htpasswd <username>
+```
+
+**Disable Basic Auth (not recommended for production):**
+Edit `docker/nginx.conf` and comment out these lines:
+```nginx
+# auth_basic "NW-Diff Access";
+# auth_basic_user_file /etc/nginx/.htpasswd;
+```
+Then restart: `docker-compose restart nginx`
+
+#### Persistent Data
+
+Docker volumes are used for persistent storage:
+- `nw-diff-logs`: Application logs
+- `nw-diff-dest`: Destination configuration snapshots
+- `nw-diff-origin`: Origin configuration snapshots
+- `nw-diff-diff`: Generated diff files
+- `nw-diff-backup`: Configuration backups
+
+To backup or migrate data:
+```bash
+# Backup volumes
+docker run --rm -v nw-diff-logs:/data -v $(pwd):/backup alpine tar czf /backup/nw-diff-logs-backup.tar.gz -C /data .
+
+# Restore volumes
+docker run --rm -v nw-diff-logs:/data -v $(pwd):/backup alpine tar xzf /backup/nw-diff-logs-backup.tar.gz -C /data
+```
+
+### Security Best Practices
+
+1. **Always use HTTPS in production** - HTTP is redirected to HTTPS by default
+2. **Use strong passwords** - Both for Basic Auth and device credentials
+3. **Keep API tokens secure** - Store `NW_DIFF_API_TOKEN` securely, never commit to version control
+4. **Use trusted certificates in production** - Self-signed certificates are for development only
+   - For production: Obtain certificates from Let's Encrypt, a commercial CA, or your organization's PKI
+   - **IMPORTANT**: When using trusted certificates, enable HSTS by uncommenting the line in `docker/nginx.conf`:
+     ```nginx
+     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+     ```
+   - **WARNING**: Do NOT enable HSTS with self-signed certificates as it will cause browser issues
+5. **Regularly update base images** - Keep Docker images up-to-date for security patches
+6. **Review nginx logs** - Monitor for suspicious activity
+7. **Limit network exposure** - Use firewall rules to restrict access to trusted networks
+
+### Troubleshooting
+
+**Certificate errors in browser:**
+- Self-signed certificates will show warnings - this is expected for development
+- Add exception in browser or import certificate to system trust store (see scripts/mk-certs.sh output)
+
+**Connection refused:**
+- Verify containers are running: `docker-compose ps`
+- Check logs: `docker-compose logs`
+
+**Authentication failures:**
+- Verify .htpasswd file exists: `ls -la docker/.htpasswd`
+- Test credentials: `htpasswd -v docker/.htpasswd <username>`
+
+**Permission errors:**
+- Ensure certificate files have correct permissions (cert.pem: 644, key.pem: 600)
+- Check volume permissions: `docker-compose exec nw-diff ls -la /app`
+
+**Docker build SSL certificate errors:**
+- If building in a corporate/CI environment with SSL interception, use:
+  ```bash
+  docker build --build-arg SKIP_PIP_SSL_VERIFY=1 -t nw-diff:latest .
+  ```
+- This adds `--trusted-host` flags for PyPI domains during pip install
+- **Note:** Only use this workaround in trusted environments; it bypasses SSL verification
+
 ## Development
 
 1. **Install development dependencies:**
