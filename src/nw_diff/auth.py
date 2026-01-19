@@ -37,6 +37,7 @@ def _verify_basic_auth(auth_header: str) -> bool:  # pylint: disable=too-many-re
     """
     try:
         # Extract base64-encoded credentials
+        # "Basic " is 6 characters, need at least 1 more for valid base64
         if not auth_header.startswith("Basic ") or len(auth_header) < 7:
             return False
 
