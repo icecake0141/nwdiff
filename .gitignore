@@ -6,6 +6,11 @@ backup/
 logs/
 !logs/.gitkeep
 
+# Docker secrets and certificates
+certs/
+nginx/.htpasswd
+.env
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

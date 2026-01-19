@@ -1,0 +1,55 @@
+# Copyright 2025 NW-Diff Contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# This file was created or modified with the assistance of an AI (Large Language Model).
+# Review required for correctness, security, and licensing.
+
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: nw-diff-app
+    environment:
+      - NW_DIFF_API_TOKEN=${NW_DIFF_API_TOKEN}
+      - NW_DIFF_BASIC_USER=${NW_DIFF_BASIC_USER}
+      - NW_DIFF_BASIC_PASSWORD=${NW_DIFF_BASIC_PASSWORD}
+      - NW_DIFF_BASIC_PASSWORD_HASH=${NW_DIFF_BASIC_PASSWORD_HASH}
+      - DEVICE_PASSWORD=${DEVICE_PASSWORD}
+      - APP_DEBUG=false
+    volumes:
+      - ./origin:/app/origin
+      - ./dest:/app/dest
+      - ./diff:/app/diff
+      - ./backup:/app/backup
+      - ./logs:/app/logs
+      - ./hosts.csv:/app/hosts.csv:ro
+    networks:
+      - nw-diff-network
+    restart: unless-stopped
+
+  proxy:
+    image: nginx:alpine
+    container_name: nw-diff-proxy
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs/fullchain.pem:/etc/letsencrypt/fullchain.pem:ro
+      - ./certs/privkey.pem:/etc/letsencrypt/privkey.pem:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    depends_on:
+      - app
+    networks:
+      - nw-diff-network
+    restart: unless-stopped
+
+networks:
+  nw-diff-network:
+    driver: bridge
