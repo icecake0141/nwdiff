@@ -36,6 +36,217 @@ NW-Diff は、ネットワークデバイスから収集された設定または
 - **詳細なデバイス表示:**
   `/host/<hostname>` エンドポイントを通じて各デバイスの詳細情報にアクセスできます。
 
+## ネットワークデバイスコマンドのカスタマイズ
+
+NW-Diff では、ネットワークデバイスで実行されるコマンドをカスタマイズして、設定およびステータスデータをキャプチャできます。このセクションでは、異なるデバイスモデルのコマンドセットを変更または拡張する方法について説明します。
+
+### コマンド設定ファイル
+
+ネットワークデバイスで実行されるコマンドは、`src/nw_diff/devices.py` に定義されています。このファイルには以下が含まれます:
+
+1. **`DEVICE_COMMANDS`** - デバイスモデルとそのコマンドセットをマッピングする辞書
+2. **`DEFAULT_COMMANDS`** - デバイスモデルが認識されない場合に使用されるフォールバックコマンド
+
+### コマンド構造の理解
+
+`DEVICE_COMMANDS` 辞書は以下の構造を使用します:
+
+```python
+DEVICE_COMMANDS = {
+    "fortinet": (
+        "get system status",
+        "diag switch physical-ports summary",
+        "diag switch trunk summary",
+        "diag switch trunk list",
+        "diag stp vlan list",
+    ),
+    "cisco": (
+        "show version",
+        "show running-config",
+    ),
+    "junos": (
+        "show chassis hardware",
+        "show route",
+    ),
+}
+```
+
+- **キー**: デバイスモデル名（`hosts.csv` の `model` 列と一致する小文字の文字列）
+- **値**: そのモデルのデバイスで実行するコマンド文字列のタプル
+
+### コマンドの変更方法
+
+#### 既存のデバイスモデルへのコマンド追加
+
+既存のデバイスモデルにコマンドを追加するには、`DEVICE_COMMANDS` の対応するタプルを編集します:
+
+```python
+# 変更前
+"cisco": (
+    "show version",
+    "show running-config",
+),
+
+# 変更後 - "show interfaces status" を追加
+"cisco": (
+    "show version",
+    "show running-config",
+    "show interfaces status",
+),
+```
+
+**重要**: Python タプル構文のため、最後のコマンドの後にカンマを付けてください。
+
+#### 新しいデバイスモデルの追加
+
+新しいデバイスモデルをサポートするには、`DEVICE_COMMANDS` 辞書に新しいエントリを追加します:
+
+```python
+DEVICE_COMMANDS = {
+    # ... 既存のモデル ...
+    "arista": (
+        "show version",
+        "show running-config",
+        "show interfaces status",
+    ),
+}
+```
+
+次に、`hosts.csv` の `model` 列が新しいキー（例: `arista`）と一致することを確認してください。
+
+#### デフォルトコマンドの変更
+
+認識されないデバイスモデルに使用されるフォールバックコマンドを変更する場合は、`DEFAULT_COMMANDS` タプルを編集します:
+
+```python
+# 変更前
+DEFAULT_COMMANDS = ("show version",)
+
+# 変更後
+DEFAULT_COMMANDS = (
+    "show version",
+    "show system information",
+)
+```
+
+### ベストプラクティスと安全ガイドライン
+
+1. **最初に手動でコマンドをテストする**
+   - `devices.py` にコマンドを追加する前に、デバイスで手動でテストして、正しく動作し、障害を引き起こさないことを確認してください
+   - コマンドが **読み取り専用** であり、デバイス設定を変更しないことを確認してください
+
+2. **読み取り専用コマンドを使用する**
+   - 情報を取得するコマンドのみを使用してください（例: `show`、`get`、`display`）
+   - デバイス設定を変更する可能性のある設定コマンド（例: `config`、`set`、`configure`）は **決して** 使用しないでください
+   - デバイスパフォーマンスに影響を与える可能性のあるコマンド（例: 本番環境での `debug` コマンド）は避けてください
+
+3. **コマンド出力サイズを考慮する**
+   - 非常に大きな出力を生成するコマンドは、大量のストレージとメモリを消費する可能性があることに注意してください
+   - コマンド出力をテストして、管理可能であることを確認してください
+   - 必要に応じて、フィルタまたは特定のクエリを使用して出力サイズを制限することを検討してください
+
+4. **デバイスベンダーの規則に従う**
+   - 各デバイスベンダーの正しいコマンド構文を使用してください
+   - 適切なコマンドの使用法については、ベンダーのドキュメントを参照してください
+   - コマンドの特権レベル要件に注意してください
+
+5. **一貫した書式を維持する**
+   - コマンドコレクションにはタプル（リストではなく）を使用してください
+   - 単一項目のタプルには末尾のカンマを含めてください: `("command",)`
+   - `hosts.csv` のエントリと一致するように、デバイスモデルキーには小文字を使用してください
+   - タプル内の個々のコマンドの周りに引用符を付けずに、コマンドを文字列として保持してください
+
+6. **変更を文書化する**
+   - 特定のコマンドが追加または変更された理由を説明するコメントを追加してください
+   - コンプライアンスまたは監視の目的で重要なコマンドの記録を保持してください
+
+7. **変更前にバックアップする**
+   - 変更を加える前に、常に `devices.py` のバックアップを保持してください
+   - 本番環境にデプロイする前に、開発環境で変更をテストしてください
+
+### 例: 完全な変更
+
+新しいデバイスモデルを追加し、既存のモデルを変更する完全な例を次に示します:
+
+```python
+# src/nw_diff/devices.py 内
+
+DEVICE_COMMANDS = {
+    "fortinet": (
+        "get system status",
+        "diag switch physical-ports summary",
+        "diag switch trunk summary",
+        "diag switch trunk list",
+        "diag stp vlan list",
+        # アップリンクステータスの監視のため追加
+        "get system interface physical",
+    ),
+    "cisco": (
+        "show version",
+        "show running-config",
+    ),
+    "junos": (
+        "show chassis hardware",
+        "show route",
+    ),
+    # 新しいデバイスモデルを追加
+    "arista": (
+        "show version",
+        "show running-config",
+        "show interfaces status",
+        "show lldp neighbors",
+    ),
+}
+
+DEFAULT_COMMANDS = ("show version",)
+```
+
+### 変更の確認
+
+`devices.py` を変更した後:
+
+1. **構文チェック**: Python 構文の検証を実行
+   ```bash
+   python -m py_compile src/nw_diff/devices.py
+   ```
+
+2. **リンティング**: コード品質をチェック
+   ```bash
+   pylint src/nw_diff/devices.py
+   ```
+
+3. **キャプチャテスト**: アプリケーションが新しいコマンドを実行できることを確認
+   - アプリケーションを起動
+   - 変更されたモデルを使用するデバイスの `/capture/origin/<hostname>` または `/capture/dest/<hostname>` エンドポイントを使用
+   - `origin` または `dest` ディレクトリの出力ファイルを確認
+   - エラーがないかログを確認
+
+4. **アプリケーションの再起動**: `devices.py` の変更を有効にするには、アプリケーションの再起動が必要です
+   ```bash
+   # ローカルで実行している場合
+   # 現在のプロセスを停止（Ctrl+C）して再起動
+   python run_app.py
+   
+   # Docker で実行している場合
+   docker-compose restart
+   ```
+
+### トラブルシューティング
+
+**コマンドが実行されない:**
+- `hosts.csv` のデバイスモデルが `DEVICE_COMMANDS` のキーと一致することを確認してください（小文字に変換後、大文字小文字を区別します）
+- 接続エラーまたはコマンド失敗については、アプリケーションログを確認してください
+- デバイスの認証情報が環境変数で正しいことを確認してください
+
+**構文エラー:**
+- タプル構文（末尾のカンマ、適切な括弧）を確認してください
+- すべての文字列が適切に引用符で囲まれていることを確認してください
+- `python -m py_compile src/nw_diff/devices.py` を実行して構文エラーをチェックしてください
+
+**デバイスでの権限エラー:**
+- ユーザーアカウントがコマンドを実行するための十分な特権を持っていることを確認してください
+- 一部のコマンドには、有効化モードまたは特定のユーザーロールが必要な場合があります
+
 ## インストール
 
 1. **リポジトリのクローン:**
