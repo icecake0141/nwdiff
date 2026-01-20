@@ -36,6 +36,216 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
 - **Detailed Device View:**
   Access detailed information for each device through the `/host/<hostname>` endpoint.
 
+## Customizing Network Device Commands
+
+NW-Diff allows you to customize the commands executed on network devices to capture configuration and status data. This section explains how to modify or extend the command set for different device models.
+
+### Command Configuration File
+
+Commands executed on network devices are defined in `src/nw_diff/devices.py`. This file contains:
+
+1. **`DEVICE_COMMANDS`** - A dictionary mapping device models to their command sets
+2. **`DEFAULT_COMMANDS`** - Fallback commands used when a device model is not recognized
+
+### Understanding the Command Structure
+
+The `DEVICE_COMMANDS` dictionary uses the following structure:
+
+```python
+DEVICE_COMMANDS = {
+    "fortinet": (
+        "get system status",
+        "diag switch physical-ports summary",
+        "diag switch trunk summary",
+        "diag switch trunk list",
+        "diag stp vlan list",
+    ),
+    "cisco": (
+        "show version",
+        "show running-config",
+    ),
+    "junos": (
+        "show chassis hardware",
+        "show route",
+    ),
+}
+```
+
+- **Key**: Device model name (lowercase string matching the `model` column in `hosts.csv`)
+- **Value**: Tuple of command strings to execute on devices of that model
+
+### How to Modify Commands
+
+#### Adding Commands to an Existing Device Model
+
+To add a command to an existing device model, edit the corresponding tuple in `DEVICE_COMMANDS`:
+
+```python
+# Before
+"cisco": (
+    "show version",
+    "show running-config",
+),
+
+# After - Added "show interfaces status"
+"cisco": (
+    "show version",
+    "show running-config",
+    "show interfaces status",
+),
+```
+
+**Important**: Keep the trailing comma after the last command for Python tuple syntax.
+
+#### Adding a New Device Model
+
+To support a new device model, add a new entry to the `DEVICE_COMMANDS` dictionary:
+
+```python
+DEVICE_COMMANDS = {
+    # ... existing models ...
+    "arista": (
+        "show version",
+        "show running-config",
+        "show interfaces status",
+    ),
+}
+```
+
+Then, ensure the `model` column in your `hosts.csv` matches the new key (e.g., `arista`).
+
+#### Modifying Default Commands
+
+If you want to change the fallback commands used for unrecognized device models, edit the `DEFAULT_COMMANDS` tuple:
+
+```python
+# Before
+DEFAULT_COMMANDS = ("show version",)
+
+# After
+DEFAULT_COMMANDS = (
+    "show version",
+    "show system information",
+)
+```
+
+### Best Practices and Safety Guidelines
+
+1. **Test Commands Manually First**
+   - Before adding commands to `devices.py`, test them manually on a device to ensure they work correctly and don't cause disruptions
+   - Verify that commands are **read-only** and do not modify device configuration
+
+2. **Use Read-Only Commands**
+   - Only use commands that retrieve information (e.g., `show`, `get`, `display`)
+   - **Never** use configuration commands (e.g., `config`, `set`, `configure`) that could modify device settings
+   - Avoid commands that could impact device performance (e.g., `debug` commands in production)
+
+3. **Consider Command Output Size**
+   - Be aware that commands producing very large outputs may consume significant storage and memory
+   - Test command outputs to ensure they are manageable
+   - Consider using filters or specific queries to limit output size when appropriate
+
+4. **Follow Device Vendor Conventions**
+   - Use the correct command syntax for each device vendor
+   - Consult vendor documentation for proper command usage
+   - Be aware of privilege level requirements for commands
+
+5. **Maintain Consistent Formatting**
+   - Use tuples (not lists) for command collections
+   - Include trailing commas for single-item tuples: `("command",)`
+   - Use lowercase for device model keys to match `hosts.csv` entries
+
+6. **Document Your Changes**
+   - Add comments explaining why specific commands were added or modified
+   - Keep a record of which commands are critical for compliance or monitoring purposes
+
+7. **Backup Before Modifying**
+   - Always keep a backup of `devices.py` before making changes
+   - Test changes in a development environment before deploying to production
+
+### Example: Complete Modification
+
+Here's a complete example of adding a new device model and modifying an existing one:
+
+```python
+# In src/nw_diff/devices.py
+
+DEVICE_COMMANDS = {
+    "fortinet": (
+        "get system status",
+        "diag switch physical-ports summary",
+        "diag switch trunk summary",
+        "diag switch trunk list",
+        "diag stp vlan list",
+        # Added for monitoring uplink status
+        "get system interface physical",
+    ),
+    "cisco": (
+        "show version",
+        "show running-config",
+    ),
+    "junos": (
+        "show chassis hardware",
+        "show route",
+    ),
+    # New device model added
+    "arista": (
+        "show version",
+        "show running-config",
+        "show interfaces status",
+        "show lldp neighbors",
+    ),
+}
+
+DEFAULT_COMMANDS = ("show version",)
+```
+
+### Verifying Your Changes
+
+After modifying `devices.py`:
+
+1. **Syntax Check**: Run Python syntax validation
+   ```bash
+   python -m py_compile src/nw_diff/devices.py
+   ```
+
+2. **Linting**: Check code quality
+   ```bash
+   pylint src/nw_diff/devices.py
+   ```
+
+3. **Test Capture**: Verify that the application can execute the new commands
+   - Start the application
+   - Use the `/capture/origin/<hostname>` or `/capture/dest/<hostname>` endpoint for a device using the modified model
+   - Check the output files in the `origin` or `dest` directories
+   - Review logs for any errors
+
+4. **Restart Application**: Changes to `devices.py` require an application restart to take effect
+   ```bash
+   # If running locally
+   # Stop the current process (Ctrl+C) and restart
+   python run_app.py
+
+   # If running with Docker
+   docker-compose restart
+   ```
+
+### Troubleshooting
+
+**Commands not executing:**
+- Verify the device model in `hosts.csv` matches the key in `DEVICE_COMMANDS` (comparison is case-insensitive)
+- Check application logs for connection errors or command failures
+- Ensure device credentials are correct in environment variables
+
+**Syntax errors:**
+- Verify tuple syntax (trailing commas, proper parentheses)
+- Ensure all strings are properly quoted
+- Run `python -m py_compile src/nw_diff/devices.py` to check for syntax errors
+
+**Permission errors on device:**
+- Verify that the user account has sufficient privileges to execute the commands
+- Some commands may require enable mode or specific user roles
+
 ## Installation
 
 1. **Clone the repository:**
