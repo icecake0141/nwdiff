@@ -41,9 +41,10 @@ jobs:
       - name: Create test hosts.csv
         run: |
           # Create a minimal hosts.csv for testing
+          # Note: Column must be 'host' not 'hostname' (see src/nw_diff/devices.py)
           cat > hosts.csv << 'EOF'
-          hostname,ipaddress,port,username,device_type,commands
-          test-device,192.0.2.1,22,admin,cisco_ios,"show version"
+          host,ipaddress,port,username,model,device_type,commands
+          test-device,192.0.2.1,22,admin,cisco,cisco_ios,"show version"
           EOF
 
       - name: Install dependencies for certificate and auth setup
