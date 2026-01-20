@@ -262,7 +262,7 @@ ProxyFix ミドルウェアにより、Flask アプリが nginx リバースプ�
    # 証明書を対話的に生成
    ./scripts/mk-certs.sh
    # プロンプトに従って証明書を生成
-   # またはホスト名を指定: CERT_HOSTNAME=myserver.example.com ./scripts/docker-setup.sh
+   # またはホスト名を指定: CERT_HOSTNAME=myserver.example.com ./scripts/mk-certs.sh
 
    # Basic 認証資格情報を対話的に生成
    ./scripts/mk-htpasswd.sh
