@@ -74,7 +74,7 @@ wait_for_service() {
         echo "Attempt $retry_count/$max_retries: Service not ready yet, waiting ${RETRY_INTERVAL}s..."
         sleep $RETRY_INTERVAL
     done
-    
+
     echo "ERROR: Service did not become ready after $max_retries attempts"
     return 1
 }
@@ -85,7 +85,7 @@ test_http_redirect() {
     echo "Test 1: HTTP to HTTPS redirect"
     # Test that HTTP redirects to HTTPS (301 or 302)
     local response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$HTTP_URL/")
-    
+
     if [ "$response" = "301" ] || [ "$response" = "302" ]; then
         test_pass "HTTP correctly redirects to HTTPS (status: $response)"
         return 0
@@ -101,7 +101,7 @@ test_https_requires_auth() {
     echo "Test 2: HTTPS endpoint requires authentication"
     # Test that accessing HTTPS without credentials returns 401
     local response=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 "$HTTPS_URL/")
-    
+
     if [ "$response" = "401" ]; then
         test_pass "HTTPS endpoint correctly requires authentication (status: 401)"
         return 0
@@ -118,7 +118,7 @@ test_basic_auth_success() {
     # Test that Basic Auth with valid credentials succeeds
     local response=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 \
         -u "$BASIC_USER:$BASIC_PASSWORD" "$HTTPS_URL/")
-    
+
     if [ "$response" = "200" ]; then
         test_pass "Basic Authentication works with valid credentials (status: 200)"
         return 0
@@ -135,7 +135,7 @@ test_basic_auth_failure() {
     # Test that Basic Auth with invalid credentials fails
     local response=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 \
         -u "baduser:badpass" "$HTTPS_URL/")
-    
+
     if [ "$response" = "401" ]; then
         test_pass "Basic Authentication rejects invalid credentials (status: 401)"
         return 0
@@ -154,7 +154,7 @@ test_bearer_token_auth() {
         -H "Authorization: Bearer $API_TOKEN" \
         -u "$BASIC_USER:$BASIC_PASSWORD" \
         "$HTTPS_URL/api/logs")
-    
+
     if [ "$response" = "200" ]; then
         test_pass "Bearer token authentication works on protected endpoint (status: 200)"
         return 0
@@ -175,7 +175,7 @@ test_protected_endpoint_without_token() {
     local response=$(curl -k -s -o /dev/null -w "%{http_code}" --max-time 10 \
         -u "$BASIC_USER:$BASIC_PASSWORD" \
         "$HTTPS_URL/api/logs")
-    
+
     # When NW_DIFF_API_TOKEN is set, the app should require Bearer token
     # So we expect 401 or 403 if only Basic Auth is provided
     # But if token auth is not enforced, it may return 200
@@ -199,7 +199,7 @@ test_tls_certificate() {
     # Verify that HTTPS is using TLS (test will fail without -k if cert is invalid)
     # We use -k to accept self-signed, but we verify SSL is actually being used
     local output=$(curl -k -v "$HTTPS_URL/" 2>&1 || true)
-    
+
     if echo "$output" | grep -E "SSL connection|TLS" >/dev/null 2>&1; then
         test_pass "HTTPS is using TLS/SSL encryption"
         return 0
@@ -217,7 +217,7 @@ test_response_content() {
     local response=$(curl -k -s --max-time 10 \
         -u "$BASIC_USER:$BASIC_PASSWORD" \
         "$HTTPS_URL/")
-    
+
     if echo "$response" | grep -q "NW-Diff\|nw-diff\|Network\|Device"; then
         test_pass "Response contains expected application content"
         return 0

@@ -667,14 +667,14 @@ The project includes automated end-to-end tests that validate the complete Docke
    export NW_DIFF_BASIC_USER=admin
    export NW_DIFF_BASIC_PASSWORD=yourpassword
    ./docker/nginx/init-certs-and-htpasswd.sh
-   
+
    # Create hosts.csv (or copy from sample)
    cp hosts.csv.sample hosts.csv
-   
+
    # Set environment variables in .env
    cp .env.example .env
    # Edit .env with your values
-   
+
    # Start the stack
    docker-compose up -d
    ```
