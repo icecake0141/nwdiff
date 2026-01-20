@@ -334,3 +334,159 @@ def test_gitignore_excludes_docker_secrets() -> None:
     assert (
         "certs" in content or "docker/certs" in content
     ), ".gitignore should exclude certificate directory"
+
+
+def test_integration_workflow_exists() -> None:
+    """Verify integration workflow file exists."""
+    workflow = PROJECT_ROOT / ".github" / "workflows" / "integration.yml"
+    assert workflow.exists(), "integration.yml should exist in .github/workflows"
+    assert workflow.is_file(), "integration.yml should be a regular file"
+
+
+def test_integration_workflow_has_license_header() -> None:
+    """Verify integration workflow contains proper license header."""
+    workflow = PROJECT_ROOT / ".github" / "workflows" / "integration.yml"
+    content = workflow.read_text(encoding="utf-8")
+    assert "Apache-2.0" in content, "integration.yml should have Apache-2.0 license"
+    assert (
+        "SPDX-License-Identifier" in content
+    ), "integration.yml should have SPDX identifier"
+
+
+def test_integration_workflow_has_llm_attribution() -> None:
+    """Verify integration workflow contains LLM attribution comment."""
+    workflow = PROJECT_ROOT / ".github" / "workflows" / "integration.yml"
+    content = workflow.read_text(encoding="utf-8")
+    assert (
+        "Large Language Model" in content
+    ), "integration.yml should have LLM attribution"
+
+
+def test_integration_test_script_exists() -> None:
+    """Verify integration test script exists and is executable."""
+    script = PROJECT_ROOT / "scripts" / "test-integration.sh"
+    assert script.exists(), "test-integration.sh should exist in scripts directory"
+    assert script.is_file(), "test-integration.sh should be a regular file"
+    assert script.stat().st_mode & 0o111, "test-integration.sh should be executable"
+
+
+def test_integration_test_script_has_license_header() -> None:
+    """Verify integration test script contains proper license header."""
+    script = PROJECT_ROOT / "scripts" / "test-integration.sh"
+    content = script.read_text(encoding="utf-8")
+    assert "Apache-2.0" in content, "test-integration.sh should have Apache-2.0 license"
+    assert (
+        "SPDX-License-Identifier" in content
+    ), "test-integration.sh should have SPDX identifier"
+
+
+def test_integration_test_script_has_llm_attribution() -> None:
+    """Verify integration test script contains LLM attribution comment."""
+    script = PROJECT_ROOT / "scripts" / "test-integration.sh"
+    content = script.read_text(encoding="utf-8")
+    assert (
+        "Large Language Model" in content
+    ), "test-integration.sh should have LLM attribution"
+
+
+def test_integration_workflow_tests_https() -> None:
+    """Verify integration workflow includes HTTPS testing."""
+    workflow = PROJECT_ROOT / ".github" / "workflows" / "integration.yml"
+    content = workflow.read_text(encoding="utf-8")
+    assert "https" in content.lower(), "workflow should test HTTPS"
+    assert (
+        "ssl" in content.lower() or "tls" in content.lower()
+    ), "workflow should reference SSL/TLS"
+
+
+def test_integration_workflow_tests_auth() -> None:
+    """Verify integration workflow includes authentication testing."""
+    workflow = PROJECT_ROOT / ".github" / "workflows" / "integration.yml"
+    content = workflow.read_text(encoding="utf-8")
+    assert (
+        "auth" in content.lower() or "htpasswd" in content.lower()
+    ), "workflow should test authentication"
+    assert "NW_DIFF_BASIC_USER" in content, "workflow should set basic auth user"
+    assert (
+        "NW_DIFF_BASIC_PASSWORD" in content
+    ), "workflow should set basic auth password"
+
+
+def test_integration_workflow_generates_certificates() -> None:
+    """Verify integration workflow generates certificates."""
+    workflow = PROJECT_ROOT / ".github" / "workflows" / "integration.yml"
+    content = workflow.read_text(encoding="utf-8")
+    assert "init-certs-and-htpasswd.sh" in content, "workflow should run init script"
+    assert "cert" in content.lower(), "workflow should mention certificates"
+
+
+def test_integration_workflow_uses_docker_compose() -> None:
+    """Verify integration workflow uses docker compose (CLI plugin or standalone)."""
+    workflow = PROJECT_ROOT / ".github" / "workflows" / "integration.yml"
+    content = workflow.read_text(encoding="utf-8")
+    # Accept both "docker-compose" (legacy) and "docker compose" (CLI plugin)
+    assert (
+        "docker-compose" in content or "docker compose" in content
+    ), "workflow should use docker-compose or docker compose"
+    assert (
+        "docker-compose up" in content
+        or "docker-compose build" in content
+        or "docker compose up" in content
+        or "docker compose build" in content
+    ), "workflow should build/start stack"
+    assert (
+        "docker-compose down" in content or "docker compose down" in content
+    ), "workflow should clean up docker compose stack"
+
+
+def test_integration_test_script_tests_http_redirect() -> None:
+    """Verify integration test script tests HTTP to HTTPS redirect."""
+    script = PROJECT_ROOT / "scripts" / "test-integration.sh"
+    content = script.read_text(encoding="utf-8")
+    assert "redirect" in content.lower(), "script should test HTTP redirect"
+    assert "301" in content or "302" in content, "script should check redirect status"
+
+
+def test_integration_test_script_tests_auth_required() -> None:
+    """Verify integration test script tests that auth is required."""
+    script = PROJECT_ROOT / "scripts" / "test-integration.sh"
+    content = script.read_text(encoding="utf-8")
+    assert "401" in content, "script should check for 401 unauthorized"
+    assert (
+        "basic" in content.lower() and "auth" in content.lower()
+    ), "script should test basic auth"
+
+
+def test_integration_test_script_tests_bearer_token() -> None:
+    """Verify integration test script tests Bearer token authentication."""
+    script = PROJECT_ROOT / "scripts" / "test-integration.sh"
+    content = script.read_text(encoding="utf-8")
+    assert (
+        "bearer" in content.lower() or "Authorization: Bearer" in content
+    ), "script should test Bearer token"
+    assert "API_TOKEN" in content, "script should use API token"
+
+
+def test_readme_has_ci_badges() -> None:
+    """Verify README includes CI status badges."""
+    readme = PROJECT_ROOT / "README.md"
+    content = readme.read_text(encoding="utf-8")
+    assert "badge.svg" in content, "README should have CI badge"
+    assert "workflows/ci.yml" in content, "README should link to CI workflow"
+    assert (
+        "workflows/integration.yml" in content
+    ), "README should link to integration workflow"
+
+
+def test_readme_documents_integration_tests() -> None:
+    """Verify README documents integration testing."""
+    readme = PROJECT_ROOT / "README.md"
+    content = readme.read_text(encoding="utf-8")
+    assert (
+        "integration test" in content.lower()
+    ), "README should mention integration tests"
+    assert "test-integration.sh" in content, "README should reference test script"
+    assert "https" in content.lower(), "README should document HTTPS testing"
+    assert (
+        "docker-compose" in content.lower()
+    ), "README should document Docker Compose testing"
