@@ -154,7 +154,6 @@ DEFAULT_COMMANDS = (
    - Use tuples (not lists) for command collections
    - Include trailing commas for single-item tuples: `("command",)`
    - Use lowercase for device model keys to match `hosts.csv` entries
-   - Keep commands as strings without quotes around individual commands within the tuple
 
 6. **Document Your Changes**
    - Add comments explaining why specific commands were added or modified
@@ -234,7 +233,7 @@ After modifying `devices.py`:
 ### Troubleshooting
 
 **Commands not executing:**
-- Verify the device model in `hosts.csv` matches the key in `DEVICE_COMMANDS` (case-sensitive after converting to lowercase)
+- Verify the device model in `hosts.csv` matches the key in `DEVICE_COMMANDS` (comparison is case-insensitive)
 - Check application logs for connection errors or command failures
 - Ensure device credentials are correct in environment variables
 
