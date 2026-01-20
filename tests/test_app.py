@@ -883,6 +883,23 @@ def test_compute_diff_sidebyside_escapes_html() -> None:
     assert "<script>bad()" not in diff_html
 
 
+def test_compute_diff_sidebyside_handles_long_lines() -> None:
+    """Test that extremely long lines have proper word-break CSS to prevent layout overflow."""
+    # Create a very long line without spaces (e.g., a long URL or hash)
+    long_line = "A" * 500  # 500 characters without spaces
+    origin = f"Short line\n{long_line}\nAnother line"
+    dest = f"Short line\n{long_line}_modified\nAnother line"
+
+    status, diff_html = diff.compute_diff(origin, dest, view="sidebyside")
+
+    assert status == "changes detected"
+    # Verify the table has word-break CSS to handle long lines
+    assert "word-break" in diff_html or "overflow-wrap" in diff_html
+    # Verify table structure is present
+    assert "<table" in diff_html
+    assert "<td" in diff_html
+
+
 def test_host_detail_response_escapes_xss(tmp_path: Path, monkeypatch) -> None:
     """Test that XSS payloads in host detail page response are escaped."""
     hosts_csv = tmp_path / "hosts.csv"
