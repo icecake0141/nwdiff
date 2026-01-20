@@ -225,7 +225,7 @@ After modifying `devices.py`:
    # If running locally
    # Stop the current process (Ctrl+C) and restart
    python run_app.py
-   
+
    # If running with Docker
    docker-compose restart
    ```

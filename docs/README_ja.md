@@ -225,7 +225,7 @@ DEFAULT_COMMANDS = ("show version",)
    # ローカルで実行している場合
    # 現在のプロセスを停止（Ctrl+C）して再起動
    python run_app.py
-   
+
    # Docker で実行している場合
    docker-compose restart
    ```
