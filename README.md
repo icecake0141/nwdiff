@@ -1,5 +1,8 @@
 # NW-Diff Project
 
+[![CI](https://github.com/icecake0141/nw-diff/workflows/CI/badge.svg)](https://github.com/icecake0141/nw-diff/actions/workflows/ci.yml)
+[![Integration Tests](https://github.com/icecake0141/nw-diff/workflows/Integration%20Tests/badge.svg)](https://github.com/icecake0141/nw-diff/actions/workflows/integration.yml)
+
 NW-Diff is a Flask-based web application designed to retrieve, compare, and display configuration or status data collected from network devices. It leverages Netmiko to connect to devices and capture data defined in a CSV file. Using diff-match-patch, the application computes differences between two sets of data and presents the results in both inline and side-by-side views. Diff HTML files are generated and stored in a dedicated "diff" directory for subsequent review.
 
 ## Features
@@ -597,6 +600,8 @@ If you discover a security vulnerability in NW-Diff:
 
 ## Development
 
+### Local Development Setup
+
 1. **Install development dependencies:**
    ```bash
    pip install -r requirements.txt -r requirements-dev.txt
@@ -619,3 +624,106 @@ If you discover a security vulnerability in NW-Diff:
    ```bash
    pre-commit run --all-files
    ```
+
+### Testing
+
+NW-Diff includes comprehensive test coverage to ensure quality and security:
+
+#### Unit and Integration Tests
+
+Run the full test suite locally:
+```bash
+pytest -v
+```
+
+The test suite includes:
+- **Unit tests**: Core application logic, authentication, authorization
+- **Integration tests**: Docker deployment configuration, security settings
+- **Type checking**: Static type analysis with mypy
+- **Linting**: Code quality checks with pylint
+- **Formatting**: Code style verification with black
+
+#### Full-Stack Integration Tests (CI)
+
+The project includes automated end-to-end tests that validate the complete Docker Compose deployment:
+
+**What is tested:**
+- ✅ Docker Compose builds successfully
+- ✅ HTTPS (TLS/SSL) is enabled and functioning
+- ✅ HTTP correctly redirects to HTTPS
+- ✅ Basic Authentication is required and working
+- ✅ Bearer token authentication on protected endpoints
+- ✅ Invalid credentials are rejected (401 responses)
+- ✅ Valid credentials grant access (200 responses)
+- ✅ Self-signed certificates are generated correctly
+- ✅ All security headers are present
+- ✅ Services start healthy and remain stable
+
+**Running integration tests locally:**
+
+1. **Setup and start the stack:**
+   ```bash
+   # Generate certificates and .htpasswd
+   export NW_DIFF_BASIC_USER=admin
+   export NW_DIFF_BASIC_PASSWORD=yourpassword
+   ./docker/nginx/init-certs-and-htpasswd.sh
+   
+   # Create hosts.csv (or copy from sample)
+   cp hosts.csv.sample hosts.csv
+   
+   # Set environment variables in .env
+   cp .env.example .env
+   # Edit .env with your values
+   
+   # Start the stack
+   docker-compose up -d
+   ```
+
+2. **Run the integration test script:**
+   ```bash
+   export NW_DIFF_BASIC_USER=admin
+   export NW_DIFF_BASIC_PASSWORD=yourpassword
+   export NW_DIFF_API_TOKEN=your_token_here
+   ./scripts/test-integration.sh
+   ```
+
+3. **Cleanup:**
+   ```bash
+   docker-compose down -v
+   ```
+
+#### Continuous Integration
+
+The project uses GitHub Actions for automated testing on every push and pull request:
+
+- **CI Workflow** (`.github/workflows/ci.yml`): Runs unit tests, linting, type checking, security audits
+- **Integration Workflow** (`.github/workflows/integration.yml`): Runs full-stack Docker Compose tests with HTTPS and authentication validation
+
+View test results: [GitHub Actions](https://github.com/icecake0141/nw-diff/actions)
+
+#### Test Coverage
+
+Tests cover:
+- Flask application routes and authentication logic
+- Docker and nginx configuration validation
+- TLS/SSL certificate setup and validation
+- Basic Authentication and Bearer token flows
+- Security headers and HTTP status codes
+- File permissions and .gitignore rules
+- SPDX license headers and LLM attribution
+
+#### Writing Tests
+
+When contributing, please:
+- Add tests for new features or bug fixes
+- Ensure all tests pass locally before submitting PR
+- Follow existing test patterns in `tests/` directory
+- Include SPDX headers and LLM attribution in test files
+- Test both positive and negative cases (success and failure scenarios)
+
+### Pre-commit Hooks
+
+Run pre-commit hooks to ensure code quality:
+```bash
+pre-commit run --all-files
+```
