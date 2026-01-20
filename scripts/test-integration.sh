@@ -66,7 +66,7 @@ wait_for_service() {
     echo "Waiting for service at $url to be ready..."
     while [ $retry_count -lt $max_retries ]; do
         if curl -k -s -f -o /dev/null --max-time 5 "$url" 2>/dev/null || \
-           curl -k -s --max-time 5 "$url" 2>&1 | grep -q "401\|200\|302"; then
+           curl -k -s --max-time 5 "$url" 2>&1 | grep -E "401|200|302" >/dev/null 2>&1; then
             echo "Service is ready!"
             return 0
         fi
@@ -200,7 +200,7 @@ test_tls_certificate() {
     # We use -k to accept self-signed, but we verify SSL is actually being used
     local output=$(curl -k -v "$HTTPS_URL/" 2>&1 || true)
     
-    if echo "$output" | grep -q "SSL connection\|TLS"; then
+    if echo "$output" | grep -E "SSL connection|TLS" >/dev/null 2>&1; then
         test_pass "HTTPS is using TLS/SSL encryption"
         return 0
     else
