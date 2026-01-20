@@ -83,7 +83,7 @@ if [ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ]; then
     log_info "Existing certificates found:"
     log_info "  Certificate: $CERT_FILE"
     log_info "  Private Key: $KEY_FILE"
-    
+
     # Verify certificate validity
     if openssl x509 -checkend 86400 -noout -in "$CERT_FILE" >/dev/null 2>&1; then
         EXPIRY=$(openssl x509 -enddate -noout -in "$CERT_FILE" | cut -d= -f2)
@@ -96,29 +96,29 @@ else
     log_warn "No existing certificates found. Generating self-signed certificates..."
     log_warn "⚠️  SECURITY WARNING: Self-signed certificates are for DEVELOPMENT/DEMO only!"
     log_warn "⚠️  For PRODUCTION, use certificates from Let's Encrypt or a trusted CA"
-    
+
     # Check if openssl is available
     if ! command -v openssl &> /dev/null; then
         log_error "openssl command not found. Cannot generate certificates."
         log_error "Please install openssl or provide pre-generated certificates in $CERT_DIR"
         exit 1
     fi
-    
+
     # Generate self-signed certificate
     log_info "Generating self-signed certificate for hostname: $CERT_HOSTNAME"
     log_info "Certificate validity: $CERT_DAYS days"
-    
+
     if openssl req -x509 -nodes -days "$CERT_DAYS" -newkey rsa:2048 \
         -keyout "$KEY_FILE" \
         -out "$CERT_FILE" \
         -subj "/C=US/ST=State/L=City/O=Dev/CN=$CERT_HOSTNAME" \
         -addext "subjectAltName=DNS:$CERT_HOSTNAME,DNS:localhost,IP:127.0.0.1" \
         >/dev/null 2>&1; then
-        
+
         # Set appropriate permissions
         chmod 644 "$CERT_FILE"
         chmod 600 "$KEY_FILE"
-        
+
         log_info "✓ Self-signed certificate generated successfully"
         log_info "  Certificate: $CERT_FILE"
         log_info "  Private Key: $KEY_FILE"
@@ -141,7 +141,7 @@ log_info "Checking Basic Authentication configuration..."
 if [ -n "${NW_DIFF_BASIC_USER:-}" ] && [ -n "${NW_DIFF_BASIC_PASSWORD:-}" ]; then
     log_info "Environment variables NW_DIFF_BASIC_USER and NW_DIFF_BASIC_PASSWORD are set"
     log_info "Generating .htpasswd file for user: $NW_DIFF_BASIC_USER"
-    
+
     # Check if htpasswd is available
     if ! command -v htpasswd &> /dev/null; then
         log_error "htpasswd command not found. Cannot generate .htpasswd file."
@@ -151,7 +151,7 @@ if [ -n "${NW_DIFF_BASIC_USER:-}" ] && [ -n "${NW_DIFF_BASIC_PASSWORD:-}" ]; the
         log_error "  Alpine:        apk add apache2-utils"
         exit 1
     fi
-    
+
     # Create .htpasswd file
     # Use -b for batch mode (password from command line)
     # Use -c to create/overwrite file
@@ -170,7 +170,7 @@ elif [ -f "$HTPASSWD_FILE" ]; then
     log_info "Existing .htpasswd file found:"
     log_info "  File: $HTPASSWD_FILE"
     log_info "  NW_DIFF_BASIC_USER/PASSWORD not set, keeping existing file"
-    
+
     # Count number of users
     USER_COUNT=$(wc -l < "$HTPASSWD_FILE")
     log_info "  Users configured: $USER_COUNT"

@@ -237,14 +237,14 @@ The ProxyFix middleware ensures that the Flask app correctly detects the origina
    ```
 
 3. **Generate TLS certificates and Basic Auth (automated):**
-   
+
    **Option A: Automated Setup (Recommended for CI/CD)**
    ```bash
    # Set environment variables
    export NW_DIFF_BASIC_USER=admin
    export NW_DIFF_BASIC_PASSWORD=your_strong_password
    export CERT_HOSTNAME=myserver.example.com  # Optional, defaults to localhost
-   
+
    # Run automated initialization script
    ./docker/nginx/init-certs-and-htpasswd.sh
    ```
@@ -253,14 +253,14 @@ The ProxyFix middleware ensures that the Flask app correctly detects the origina
    - Create .htpasswd file with provided credentials
    - Validate file permissions and configuration
    - Display security warnings and reminders
-   
+
    **Option B: Interactive Setup**
    ```bash
    # Generate certificates interactively
    ./scripts/mk-certs.sh
    # Follow prompts to generate certificates
    # Or specify hostname: CERT_HOSTNAME=myserver.example.com ./scripts/docker-setup.sh
-   
+
    # Generate Basic Auth credentials interactively
    ./scripts/mk-htpasswd.sh
    # Follow prompts to create username/password
@@ -442,7 +442,7 @@ NW-Diff is designed with security as a priority, but proper deployment requires 
    - Restrict HTTPS (443) access to authorized networks/IPs
    - Close HTTP (80) port if not needed (optional, redirects to HTTPS by default)
    - Use VPN or bastion host for remote access
-   
+
 2. **Reverse Proxy Hardening:**
    - The nginx configuration includes rate limiting by default
    - Adjust rate limits in `docker/nginx.conf` based on your usage patterns:
