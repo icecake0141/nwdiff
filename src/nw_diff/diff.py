@@ -149,8 +149,11 @@ def generate_side_by_side_html(origin_data, dest_data):
 
     # Build the side-by-side table HTML
     table_class = "table table-bordered"
-    table_style = "width:100%; border-collapse: collapse;"
-    td_style = "vertical-align: top; width:50%; white-space: pre-wrap;"
+    table_style = "width:100%; border-collapse: collapse; table-layout: fixed;"
+    td_style = (
+        "vertical-align: top; width:50%; white-space: pre-wrap; "
+        "word-break: break-word; overflow-wrap: break-word;"
+    )
     html = f"""<table class="{table_class}" style="{table_style}">
   <tr>
     <td style="{td_style}">{origin_html}</td>
