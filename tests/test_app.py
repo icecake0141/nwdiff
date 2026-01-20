@@ -884,7 +884,8 @@ def test_compute_diff_sidebyside_escapes_html() -> None:
 
 
 def test_compute_diff_sidebyside_handles_long_lines() -> None:
-    """Test that extremely long lines have proper word-break CSS to prevent layout overflow."""
+    """Test that extremely long lines have proper word-break CSS to prevent
+    layout overflow."""
     # Create a very long line without spaces (e.g., a long URL or hash)
     long_line = "A" * 500  # 500 characters without spaces
     origin = f"Short line\n{long_line}\nAnother line"
