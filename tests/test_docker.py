@@ -16,11 +16,11 @@ Integration tests for Docker deployment with HTTPS and Basic Authentication.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,6 +58,48 @@ def test_helper_scripts_exist() -> None:
     mk_certs = scripts_dir / "mk-certs.sh"
     assert mk_certs.exists(), "mk-certs.sh should exist"
     assert mk_certs.stat().st_mode & 0o111, "mk-certs.sh should be executable"
+
+
+def test_init_script_exists() -> None:
+    """Verify automated init script exists and is executable."""
+    init_script = PROJECT_ROOT / "docker" / "nginx" / "init-certs-and-htpasswd.sh"
+    assert init_script.exists(), "init-certs-and-htpasswd.sh should exist"
+    assert init_script.is_file(), "init-certs-and-htpasswd.sh should be a regular file"
+    assert (
+        init_script.stat().st_mode & 0o111
+    ), "init-certs-and-htpasswd.sh should be executable"
+
+
+def test_init_script_has_license_header() -> None:
+    """Verify init script contains proper license header."""
+    init_script = PROJECT_ROOT / "docker" / "nginx" / "init-certs-and-htpasswd.sh"
+    content = init_script.read_text(encoding="utf-8")
+    assert "Apache-2.0" in content, "init script should have Apache-2.0 license"
+    assert (
+        "SPDX-License-Identifier" in content
+    ), "init script should have SPDX identifier"
+
+
+def test_init_script_has_llm_attribution() -> None:
+    """Verify init script contains LLM attribution comment."""
+    init_script = PROJECT_ROOT / "docker" / "nginx" / "init-certs-and-htpasswd.sh"
+    content = init_script.read_text(encoding="utf-8")
+    assert "Large Language Model" in content, "init script should have LLM attribution"
+
+
+def test_init_script_has_security_warnings() -> None:
+    """Verify init script contains appropriate security warnings."""
+    init_script = PROJECT_ROOT / "docker" / "nginx" / "init-certs-and-htpasswd.sh"
+    content = init_script.read_text(encoding="utf-8")
+    assert (
+        "self-signed" in content.lower()
+    ), "init script should warn about self-signed certificates"
+    assert (
+        "production" in content.lower()
+    ), "init script should have production guidance"
+    assert (
+        "let's encrypt" in content.lower() or "letsencrypt" in content.lower()
+    ), "init script should mention Let's Encrypt"
 
 
 def test_env_example_exists() -> None:
@@ -148,6 +190,55 @@ def test_nginx_conf_has_security_headers() -> None:
     assert (
         "X-XSS-Protection" in content
     ), "nginx.conf should set X-XSS-Protection header"
+
+
+def test_nginx_conf_has_hsts_documentation() -> None:
+    """Verify nginx.conf has proper HSTS documentation and warnings."""
+    nginx_conf = PROJECT_ROOT / "docker" / "nginx.conf"
+    content = nginx_conf.read_text(encoding="utf-8")
+    assert (
+        "Strict-Transport-Security" in content
+    ), "nginx.conf should reference HSTS header"
+    assert (
+        "self-signed" in content.lower()
+    ), "nginx.conf should warn about self-signed certificates"
+    assert "production" in content.lower(), "nginx.conf should have production guidance"
+
+
+def test_nginx_conf_enforces_modern_tls() -> None:
+    """Verify nginx.conf enforces only modern TLS versions."""
+    nginx_conf = PROJECT_ROOT / "docker" / "nginx.conf"
+    content = nginx_conf.read_text(encoding="utf-8")
+    assert "TLSv1.2" in content, "nginx.conf should support TLSv1.2"
+    assert "TLSv1.3" in content, "nginx.conf should support TLSv1.3"
+    # Check that the ssl_protocols directive only includes modern versions
+    # Look for the actual directive, not comments
+    ssl_protocols_match = re.search(r"ssl_protocols\s+([^;]+);", content)
+    assert ssl_protocols_match, "nginx.conf should have ssl_protocols directive"
+    protocols = ssl_protocols_match.group(1).strip()
+
+    # Verify exactly TLSv1.2 and TLSv1.3 are present using regex
+    assert re.search(r"\bTLSv1\.2\b", protocols), "ssl_protocols should include TLSv1.2"
+    assert re.search(r"\bTLSv1\.3\b", protocols), "ssl_protocols should include TLSv1.3"
+
+    # Ensure old versions are not in the actual directive using word boundaries
+    assert not re.search(
+        r"\bTLSv1\.1\b", protocols
+    ), "ssl_protocols should not include TLSv1.1"
+    assert not re.search(
+        r"\bTLSv1\.0\b|\bTLSv1\b(?!\.\d)", protocols
+    ), "ssl_protocols should not include TLSv1.0"
+
+
+def test_nginx_conf_has_strong_ciphers() -> None:
+    """Verify nginx.conf uses strong cipher suites."""
+    nginx_conf = PROJECT_ROOT / "docker" / "nginx.conf"
+    content = nginx_conf.read_text(encoding="utf-8")
+    assert "ssl_ciphers" in content, "nginx.conf should define ssl_ciphers"
+    assert (
+        "ECDHE" in content
+    ), "nginx.conf should prefer forward secrecy ciphers (ECDHE)"
+    assert "GCM" in content, "nginx.conf should include modern AEAD ciphers (GCM)"
 
 
 def test_dockerfile_uses_non_root_user() -> None:
