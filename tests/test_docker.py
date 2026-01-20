@@ -421,16 +421,22 @@ def test_integration_workflow_generates_certificates() -> None:
 
 
 def test_integration_workflow_uses_docker_compose() -> None:
-    """Verify integration workflow uses docker-compose."""
+    """Verify integration workflow uses docker compose (CLI plugin or standalone)."""
     workflow = PROJECT_ROOT / ".github" / "workflows" / "integration.yml"
     content = workflow.read_text(encoding="utf-8")
-    assert "docker-compose" in content, "workflow should use docker-compose"
+    # Accept both "docker-compose" (legacy) and "docker compose" (CLI plugin)
     assert (
-        "docker-compose up" in content or "docker-compose build" in content
+        "docker-compose" in content or "docker compose" in content
+    ), "workflow should use docker-compose or docker compose"
+    assert (
+        "docker-compose up" in content
+        or "docker-compose build" in content
+        or "docker compose up" in content
+        or "docker compose build" in content
     ), "workflow should build/start stack"
     assert (
-        "docker-compose down" in content
-    ), "workflow should clean up docker-compose stack"
+        "docker-compose down" in content or "docker compose down" in content
+    ), "workflow should clean up docker compose stack"
 
 
 def test_integration_test_script_tests_http_redirect() -> None:

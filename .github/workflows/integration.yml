@@ -77,26 +77,26 @@ jobs:
       - name: Build Docker images
         run: |
           # Build with timeout and verbose output
-          docker-compose build --progress=plain
+          docker compose build --progress=plain
         timeout-minutes: 15
 
       - name: Start Docker Compose stack
         run: |
           # Start services in detached mode
-          docker-compose up -d
+          docker compose up -d
           
           # Wait for containers to be healthy
           echo "Waiting for containers to start..."
           sleep 10
           
           # Check container status
-          docker-compose ps
+          docker compose ps
           
           # Show logs for debugging
           echo "=== Flask app logs ==="
-          docker-compose logs nw-diff
+          docker compose logs nw-diff
           echo "=== Nginx logs ==="
-          docker-compose logs nginx
+          docker compose logs nginx
 
       - name: Check service health
         run: |
@@ -105,9 +105,9 @@ jobs:
           elapsed=0
           
           while [ $elapsed -lt $timeout ]; do
-            if docker-compose ps | grep -q "Up (healthy)"; then
+            if docker compose ps | grep -q "Up (healthy)"; then
               echo "Services are healthy"
-              docker-compose ps
+              docker compose ps
               exit 0
             fi
             echo "Waiting for services to be healthy... ($elapsed/$timeout seconds)"
@@ -116,8 +116,8 @@ jobs:
           done
           
           echo "Services did not become healthy in time"
-          docker-compose ps
-          docker-compose logs
+          docker compose ps
+          docker compose logs
           exit 1
 
       - name: Run integration tests
@@ -145,15 +145,15 @@ jobs:
         if: failure()
         run: |
           echo "=== Docker Compose Status ==="
-          docker-compose ps
+          docker compose ps
           
           echo ""
           echo "=== Flask App Logs ==="
-          docker-compose logs nw-diff
+          docker compose logs nw-diff
           
           echo ""
           echo "=== Nginx Logs ==="
-          docker-compose logs nginx
+          docker compose logs nginx
           
           echo ""
           echo "=== Container Inspect ==="
@@ -163,8 +163,8 @@ jobs:
       - name: Cleanup Docker Compose stack
         if: always()
         run: |
-          docker-compose down -v
-          docker-compose ps
+          docker compose down -v
+          docker compose ps
 
   unit-and-integration-tests:
     runs-on: ubuntu-latest
