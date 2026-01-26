@@ -13,14 +13,14 @@
 """
 Test suite for validating installation requirements and user-facing setup.
 
-This test suite ensures that the installation instructions documented in README.md
-are accurate and that the application can be properly installed and run by general users.
+This test suite ensures that the installation instructions documented in
+README.md are accurate and that the application can be properly installed
+and run by general users.
 """
 
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -32,9 +32,10 @@ class TestInstallationPrerequisites:
     def test_python_version_compatibility(self):
         """Verify Python version is 3.11 or higher."""
         version_info = sys.version_info
-        assert version_info >= (3, 11), (
-            f"Python 3.11+ required, found {version_info.major}.{version_info.minor}"
-        )
+        assert version_info >= (
+            3,
+            11,
+        ), f"Python 3.11+ required, found {version_info.major}.{version_info.minor}"
 
     def test_requirements_file_exists(self):
         """Verify requirements.txt exists and is readable."""
@@ -68,7 +69,7 @@ class TestInstallationSteps:
     """Test that documented installation steps can be executed successfully."""
 
     def test_requirements_can_be_installed(self, tmp_path):
-        """Test that requirements.txt can be installed in a clean virtual environment."""
+        """Test requirements.txt can be installed in clean venv."""
         repo_root = Path(__file__).parent.parent
         requirements_file = repo_root / "requirements.txt"
 
@@ -89,22 +90,27 @@ class TestInstallationSteps:
             [str(pip_path), "install", "-q", "-r", str(requirements_file)],
             capture_output=True,
             text=True,
+            check=False,
         )
-        assert result.returncode == 0, f"Failed to install requirements: {result.stderr}"
+        assert (
+            result.returncode == 0
+        ), f"Failed to install requirements: {result.stderr}"
 
     def test_hosts_csv_can_be_created_from_sample(self, tmp_path):
         """Test that hosts.csv can be created from sample file."""
+        import shutil  # pylint: disable=import-outside-toplevel
+
         repo_root = Path(__file__).parent.parent
         sample_file = repo_root / "hosts.csv.sample"
         test_file = tmp_path / "hosts.csv"
 
         # Copy sample to hosts.csv
-        import shutil
-
         shutil.copy(sample_file, test_file)
 
         assert test_file.exists(), "Failed to create hosts.csv from sample"
-        assert test_file.read_text() == sample_file.read_text(), "Content mismatch"
+        assert (
+            test_file.read_text() == sample_file.read_text()
+        ), "Content mismatch"
 
 
 class TestEnvironmentVariables:
@@ -121,7 +127,7 @@ class TestEnvironmentVariables:
     def test_api_token_generation(self):
         """Test that API token can be generated using documented method."""
         # This is the command documented in README
-        import secrets
+        import secrets  # pylint: disable=import-outside-toplevel
 
         token = secrets.token_urlsafe(32)
         assert len(token) > 0, "Failed to generate token"
@@ -132,9 +138,7 @@ class TestEnvironmentVariables:
         os.environ["NW_DIFF_BASIC_USER"] = "test_user"
         os.environ["NW_DIFF_BASIC_PASSWORD"] = "test_password"
 
-        assert (
-            os.environ.get("NW_DIFF_BASIC_USER") == "test_user"
-        ), "Basic user not set"
+        assert os.environ.get("NW_DIFF_BASIC_USER") == "test_user", "Basic user not set"
         assert (
             os.environ.get("NW_DIFF_BASIC_PASSWORD") == "test_password"
         ), "Basic password not set"
@@ -207,9 +211,9 @@ class TestDocumentation:
         readme = repo_root / "README.md"
         content = readme.read_text()
 
-        assert "venv" in content.lower() or "virtual environment" in content.lower(), (
-            "Virtual environment recommendation missing"
-        )
+        assert (
+            "venv" in content.lower() or "virtual environment" in content.lower()
+        ), "Virtual environment recommendation missing"
 
     def test_readme_has_llm_attribution(self):
         """Verify README.md has LLM attribution as per policy."""
