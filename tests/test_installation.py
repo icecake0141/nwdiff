@@ -108,9 +108,7 @@ class TestInstallationSteps:
         shutil.copy(sample_file, test_file)
 
         assert test_file.exists(), "Failed to create hosts.csv from sample"
-        assert (
-            test_file.read_text() == sample_file.read_text()
-        ), "Content mismatch"
+        assert test_file.read_text() == sample_file.read_text(), "Content mismatch"
 
 
 class TestEnvironmentVariables:
