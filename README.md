@@ -1,3 +1,17 @@
+<!--
+Copyright 2025 NW-Diff Contributors
+SPDX-License-Identifier: Apache-2.0
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+This file was created or modified with the assistance of an AI (Large Language Model).
+Review required for correctness, security, and licensing.
+-->
+
 # NW-Diff Project
 
 [![CI](https://github.com/icecake0141/nw-diff/workflows/CI/badge.svg)](https://github.com/icecake0141/nw-diff/actions/workflows/ci.yml)
@@ -248,69 +262,89 @@ After modifying `devices.py`:
 
 ## Installation
 
+This section covers the basic installation process for end users who want to run NW-Diff. For development setup including linting, testing, and code quality tools, see the [Development](#development) section.
+
+### Prerequisites
+
+- **Python 3.11 or higher** (tested with Python 3.11)
+- **pip** (Python package installer)
+- **Git** (for cloning the repository)
+- Network access to target devices via SSH
+
+### Installation Steps
+
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/nw-diff.git
-   ```
-2. **Navigate to the project directory:**
-   ```bash
+   git clone https://github.com/icecake0141/nw-diff.git
    cd nw-diff
    ```
 
+2. **Create a virtual environment (recommended):**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
 3. **Install dependencies:**
-   Ensure you have Python installed, then install the required packages:
    ```bash
    pip install -r requirements.txt
    ```
-   Required packages include Flask, Netmiko, and diff-match-patch.
+   This installs Flask, Netmiko, diff-match-patch, and other required packages.
 
-4. **Configure Environment Variables:**
-   - Set the `DEVICE_PASSWORD` environment variable to provide the password needed for device connections:
-     ```bash
-     export DEVICE_PASSWORD=your_device_password
-     ```
-   - **Set the `NW_DIFF_API_TOKEN` environment variable to secure sensitive API endpoints** (capture, logs, export):
-     ```bash
-     export NW_DIFF_API_TOKEN=your_secure_random_token
-     ```
-     Generate a secure token with:
-     ```bash
-     python -c "import secrets; print(secrets.token_urlsafe(32))"
-     ```
+4. **Create the device inventory file:**
+   ```bash
+   cp hosts.csv.sample hosts.csv
+   ```
+   Edit `hosts.csv` to add your network devices (hostname, IP address, SSH port, username, device model).
 
-     **Important:** If `NW_DIFF_API_TOKEN` is not set, sensitive endpoints will be accessible without authentication (not recommended for production).
+5. **Configure required environment variables:**
+   ```bash
+   # Required: Password for SSH connections to devices
+   export DEVICE_PASSWORD=your_device_password
 
-   - **(Optional) Configure HTTP Basic Authentication** for browser-based access to protected endpoints:
-     ```bash
-     export NW_DIFF_BASIC_USER=your_username
-     ```
+   # Required for security: Token to protect sensitive API endpoints
+   export NW_DIFF_API_TOKEN=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+   ```
 
-     For **production**, use a hashed password (recommended):
-     ```bash
-     # Generate password hash using Python
-     python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('your_password'))"
-     export NW_DIFF_BASIC_PASSWORD_HASH='<generated_hash>'
-     ```
+   **Important:** The `NW_DIFF_API_TOKEN` protects capture, logs, and export endpoints. Without it, these endpoints will be accessible without authentication.
 
-     For **development only**, you can use a plain password (not recommended for production):
-     ```bash
-     export NW_DIFF_BASIC_PASSWORD=your_plain_password
-     ```
+6. **(Optional) Configure HTTP Basic Authentication:**
+   
+   For browser-based access to protected endpoints, set a username and password:
+   ```bash
+   export NW_DIFF_BASIC_USER=admin
+   export NW_DIFF_BASIC_PASSWORD=your_secure_password
+   ```
 
-     **Note:** Basic Authentication is only enforced when `NW_DIFF_API_TOKEN` is set. Both Bearer token (`Authorization: Bearer <token>`) and Basic auth (`Authorization: Basic <base64(user:pass)>`) will be accepted for protected endpoints.
+   **Note:** Both Bearer token and Basic Authentication are accepted for protected endpoints when `NW_DIFF_API_TOKEN` is set.
 
-   - **(Optional) Set the `HOSTS_CSV` environment variable** to specify a custom location for the hosts inventory file:
-     ```bash
-     export HOSTS_CSV=/path/to/hosts.csv
-     ```
-     If not set, the application will use the default `hosts.csv` in the current directory.
+7. **(Optional) Set custom hosts file location:**
+   ```bash
+   export HOSTS_CSV=/path/to/hosts.csv
+   ```
+   By default, the application looks for `hosts.csv` in the current directory.
 
-     **Benefits:** Storing the hosts inventory outside the repository improves security by preventing accidental commits of sensitive data (IP addresses, usernames, device models). This is particularly useful for production deployments where the inventory can be mounted as a secret or configuration volume.
+8. **Run the application:**
+   ```bash
+   python run_app.py
+   ```
+   The application will start on `http://127.0.0.1:5000` by default.
 
-     **Container example:**
-     ```bash
-     docker run -v /secure/path/hosts.csv:/app/hosts.csv -e HOSTS_CSV=/app/hosts.csv ...
-     ```
+9. **Access the application:**
+   Open your web browser and navigate to [http://localhost:5000](http://localhost:5000)
+
+### Environment Variables Reference
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DEVICE_PASSWORD` | Yes | Password for SSH connections to network devices |
+| `NW_DIFF_API_TOKEN` | Recommended | Secure token for protecting sensitive API endpoints (capture, logs, export) |
+| `NW_DIFF_BASIC_USER` | Optional | Username for HTTP Basic Authentication |
+| `NW_DIFF_BASIC_PASSWORD` | Optional | Password for HTTP Basic Authentication |
+| `HOSTS_CSV` | Optional | Custom path to hosts inventory file (default: `hosts.csv`) |
+| `FLASK_RUN_HOST` | Optional | Host to bind to (default: `127.0.0.1`) |
+| `FLASK_RUN_PORT` | Optional | Port to bind to (default: `5000`) |
+| `APP_DEBUG` | Optional | Enable debug mode (`true`/`false`, default: `false`) - **Never use in production** |
 
 ## Usage
 
