@@ -309,7 +309,7 @@ This section covers the basic installation process for end users who want to run
    **Important:** The `NW_DIFF_API_TOKEN` protects capture, logs, and export endpoints. Without it, these endpoints will be accessible without authentication.
 
 6. **(Optional) Configure HTTP Basic Authentication:**
-   
+
    For browser-based access to protected endpoints, set a username and password:
    ```bash
    export NW_DIFF_BASIC_USER=admin
