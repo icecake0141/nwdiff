@@ -31,6 +31,13 @@ NW-Diff is a Flask-based web application designed to retrieve, compare, and disp
 
   The captured outputs are stored in the `origin` and `dest` directories, respectively.
 
+  **Timeout Handling:**
+  - Each command has a 10-second timeout to prevent hanging on unresponsive devices
+  - If a command times out, it is logged as an error and skipped
+  - The session continues with remaining commands instead of aborting
+  - Timeout errors are logged with the specific device and command for troubleshooting
+  - This ensures maximum data collection even in unreliable network conditions
+
 - **Configuration Backup:**
   Automatic backup creation before overwriting files to preserve historical configurations and prevent data loss:
   - Backups are created automatically before any file is overwritten during capture operations
