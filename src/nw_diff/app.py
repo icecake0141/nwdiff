@@ -26,7 +26,7 @@ from flask import (
     request,
     url_for,
 )
-from netmiko import ConnectHandler
+from netmiko import ConnectHandler, NetMikoTimeoutException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Import from nw_diff modules
@@ -120,12 +120,21 @@ def capture(base, hostname):
         # Execute all commands in a single session
         for command in commands:
             logger.debug("Executing command on %s: %s", hostname, command)
-            output = connection.send_command(command)
-            filepath = get_file_path(hostname, command, base)
-            create_backup(filepath)
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(output)
-            logger.debug("Saved output for %s to: %s", command, filepath)
+            try:
+                output = connection.send_command(command, read_timeout=10)
+                filepath = get_file_path(hostname, command, base)
+                create_backup(filepath)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(output)
+                logger.debug("Saved output for %s to: %s", command, filepath)
+            except NetMikoTimeoutException:
+                logger.error(
+                    "Command timed out on %s: %s - skipping this command",
+                    hostname,
+                    command,
+                )
+                # Continue with next command instead of failing the entire session
+                continue
 
         connection.disconnect()
         logger.info(
@@ -191,12 +200,21 @@ def capture_all(base):
 
             for command in commands:
                 logger.debug("Executing command on %s: %s", hostname, command)
-                output = connection.send_command(command)
-                filepath = get_file_path(hostname, command, base)
-                create_backup(filepath)
-                with open(filepath, "w", encoding="utf-8") as f:
-                    f.write(output)
-                logger.debug("Saved output for %s to: %s", command, filepath)
+                try:
+                    output = connection.send_command(command, read_timeout=10)
+                    filepath = get_file_path(hostname, command, base)
+                    create_backup(filepath)
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.write(output)
+                    logger.debug("Saved output for %s to: %s", command, filepath)
+                except NetMikoTimeoutException:
+                    logger.error(
+                        "Command timed out on %s: %s - skipping this command",
+                        hostname,
+                        command,
+                    )
+                    # Continue with next command instead of failing the entire session
+                    continue
 
             connection.disconnect()
             logger.info(

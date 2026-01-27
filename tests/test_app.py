@@ -21,8 +21,10 @@ import re
 import sys
 import time
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pytest
+from netmiko import NetMikoTimeoutException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -1615,3 +1617,178 @@ def test_flask_run_port_can_be_set(monkeypatch) -> None:
 
     port = int(os.environ.get("FLASK_RUN_PORT", "5000"))
     assert port == 8080
+
+
+# --- Tests for command-level timeout handling ---
+
+
+def test_capture_handles_command_timeout_gracefully(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    """Test that command timeout does not abort the entire session."""
+    # Setup test data
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
+    monkeypatch.setenv("DEVICE_PASSWORD", "test_password")
+
+    # Setup storage directories
+    origin_dir = tmp_path / "origin"
+    origin_dir.mkdir()
+    dest_dir = tmp_path / "dest"
+    dest_dir.mkdir()
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(storage, "DEST_DIR", str(dest_dir))
+
+    # Mock ConnectHandler and simulate timeout on second command
+    mock_connection = Mock()
+    mock_connection.enable = Mock()
+    mock_connection.disconnect = Mock()
+
+    def send_command_side_effect(
+        command, read_timeout=None
+    ):  # pylint: disable=unused-argument
+        if "show version" in command:
+            return "Version output"
+        if "show running-config" in command:
+            raise NetMikoTimeoutException("Command timed out")
+        return f"Output for {command}"
+
+    mock_connection.send_command = Mock(side_effect=send_command_side_effect)
+
+    with patch("nw_diff.app.ConnectHandler", return_value=mock_connection):
+        with caplog.at_level(logging.ERROR):
+            with app.app.test_client() as client:
+                response = client.post("/capture/origin/router1")
+
+    # Verify the request succeeded despite timeout
+    assert response.status_code == 302  # Redirect to host_list
+
+    # Verify timeout was logged
+    assert any(
+        "Command timed out on router1" in record.message for record in caplog.records
+    )
+    assert any("show running-config" in record.message for record in caplog.records)
+
+    # Verify connection was still properly closed
+    mock_connection.disconnect.assert_called_once()
+
+    # Verify send_command was called with read_timeout parameter
+    calls = mock_connection.send_command.call_args_list
+    for call in calls:
+        assert call.kwargs.get("read_timeout") == 10
+
+
+def test_capture_all_handles_command_timeout_gracefully(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    """Test that command timeout in capture_all does not abort device session."""
+    # Setup test data with two hosts
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model
+router1,10.0.0.1,admin,22,cisco
+router2,10.0.0.2,admin,22,cisco
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
+    monkeypatch.setenv("DEVICE_PASSWORD", "test_password")
+
+    # Setup storage directories
+    origin_dir = tmp_path / "origin"
+    origin_dir.mkdir()
+    dest_dir = tmp_path / "dest"
+    dest_dir.mkdir()
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(storage, "DEST_DIR", str(dest_dir))
+
+    # Mock ConnectHandler and simulate timeout on specific commands
+    mock_connection = Mock()
+    mock_connection.enable = Mock()
+    mock_connection.disconnect = Mock()
+
+    def send_command_side_effect(
+        command, read_timeout=None
+    ):  # pylint: disable=unused-argument
+        # Timeout on show running-config for all devices
+        if "show running-config" in command:
+            raise NetMikoTimeoutException("Command timed out")
+        return f"Output for {command}"
+
+    mock_connection.send_command = Mock(side_effect=send_command_side_effect)
+
+    with patch("nw_diff.app.ConnectHandler", return_value=mock_connection):
+        with caplog.at_level(logging.ERROR):
+            with app.app.test_client() as client:
+                response = client.post("/capture_all/origin")
+
+    # Verify the request succeeded despite timeouts
+    assert response.status_code == 302  # Redirect to host_list
+
+    # Verify timeout was logged for both routers
+    timeout_logs = [
+        record for record in caplog.records if "Command timed out" in record.message
+    ]
+    assert len(timeout_logs) >= 2  # At least one per router
+
+    # Verify both devices attempted connection
+    assert mock_connection.enable.call_count >= 2
+
+    # Verify connections were properly closed
+    assert mock_connection.disconnect.call_count >= 2
+
+
+def test_capture_timeout_logs_correct_device_and_command(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    """Test that timeout log messages include correct device and command info."""
+    # Setup test data
+    hosts_csv = tmp_path / "hosts.csv"
+    hosts_csv.write_text(
+        """host,ip,username,port,model\nrouter1,10.0.0.1,admin,22,cisco\n""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(devices, "HOSTS_CSV", str(hosts_csv))
+    monkeypatch.delenv("NW_DIFF_API_TOKEN", raising=False)
+    monkeypatch.setenv("DEVICE_PASSWORD", "test_password")
+
+    # Setup storage directories
+    origin_dir = tmp_path / "origin"
+    origin_dir.mkdir()
+    dest_dir = tmp_path / "dest"
+    dest_dir.mkdir()
+    monkeypatch.setattr(storage, "ORIGIN_DIR", str(origin_dir))
+    monkeypatch.setattr(storage, "DEST_DIR", str(dest_dir))
+
+    # Mock ConnectHandler
+    mock_connection = Mock()
+    mock_connection.enable = Mock()
+    mock_connection.disconnect = Mock()
+    mock_connection.send_command = Mock(
+        side_effect=NetMikoTimeoutException("Timeout on show version")
+    )
+
+    with patch("nw_diff.app.ConnectHandler", return_value=mock_connection):
+        with caplog.at_level(logging.ERROR):
+            with app.app.test_client() as client:
+                client.post("/capture/origin/router1")
+
+    # Verify specific error message format
+    error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
+    timeout_log = next(
+        (log for log in error_logs if "Command timed out" in log.message), None
+    )
+
+    assert timeout_log is not None
+    assert "router1" in timeout_log.message
+    # Should mention at least one command that timed out
+    assert any(
+        cmd in timeout_log.message
+        for cmd in ["show version", "show running-config", "show ip interface brief"]
+    )
